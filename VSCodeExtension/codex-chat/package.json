@@ -1,0 +1,52 @@
+{
+  "activationEvents": [
+    "onCommand:nestify.openChat"
+  ],
+  "name": "nestify-extension",
+  "displayName": "Nestify",
+  "description": "Chat with the Nestify core directly inside Visual Studio Code.",
+  "version": "0.0.1",
+  "publisher": "nestify",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "nestify.openChat",
+        "title": "Nestify: Open Chat",
+        "category": "Nestify"
+      }
+    ],
+    "configuration": {
+      "title": "Nestify",
+      "properties": {
+        "nestify.workspacePath": {
+          "type": "string",
+          "default": "",
+          "description": "Workspace path used as the current working directory when launching the Nestify Python process. Defaults to the first VS Code workspace folder."
+        },
+        "nestify.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable to use for launching the Nestify bridge backend."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "echo No build step needed.",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "vsce": "^2.15.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/otacon6530/CodexOpenAIAgent"
+  }
+}

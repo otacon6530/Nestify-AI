@@ -6,6 +6,7 @@ src/nestify.egg-info/dependency_links.txt
 src/nestify.egg-info/entry_points.txt
 src/nestify.egg-info/requires.txt
 src/nestify.egg-info/top_level.txt
+src/nestify_bridge/__main__.py
 src/nestify_bridge/main.py
 src/nestify_cli/__init__.py
 src/nestify_cli/main.py

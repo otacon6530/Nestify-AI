@@ -10,6 +10,9 @@ def main():
         sys.stdout.write(json.dumps({"type": "error", "exit_code": startup_status}) + "\n")
         sys.stdout.flush()
         sys.exit(startup_status)
+    # Signal ready to the caller
+    sys.stdout.write(json.dumps({"type": "ready"}) + "\n")
+    sys.stdout.flush()
 
     for line in sys.stdin:
         line = line.strip()

@@ -72,50 +72,61 @@ try {
         Write-Info 'Skipping tests per flag.'
     }
 
-    # VS Code extension build/package/install (build by default if present)
-    $extDir = Join-Path $Root 'vscode-extension'
-    $pkgJson = Join-Path $extDir 'package.json'
-    if (Test-Path $pkgJson) {
+    # VS Code extension build/package/install (auto-detect and run by default)
+    $extCandidates = @(
+        (Join-Path $Root 'vscode-extension'),
+        (Join-Path (Join-Path $Root 'VSCodeExtension') 'codex-chat')
+    )
+    $extDir = $null
+    $pkgJson = $null
+    foreach ($d in $extCandidates) {
+        $pj = Join-Path $d 'package.json'
+        if (Test-Path $pj) { $extDir = $d; $pkgJson = $pj; break }
+    }
+    if ($pkgJson) {
         Push-Location $extDir
         try {
-            Write-Info 'Building VS Code extension (npm install + compile)'
+            Write-Info "Building VS Code extension in $extDir (npm install + compile/build)"
             npm install
-            npm run compile
+            # Run compile if present; else try build
+            try { npm run compile } catch { try { npm run build } catch { Write-Warn 'No compile/build script present, continuing.' } }
 
+            Write-Info 'Packaging VS Code extension (prefer local vsce)'
             $vsixPath = $null
-            if ($PackageExtension) {
-                Write-Info 'Packaging VS Code extension via vsce'
-                try {
-                    $pkgOutput = npx vsce package 2>&1
-                    Write-Info ($pkgOutput | Out-String)
-                    # Try to find generated VSIX in folder
-                    $vsix = Get-ChildItem -Filter '*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                    if ($vsix) { $vsixPath = $vsix.FullName; Write-Info "VSIX generated: $vsixPath" }
-                    else { Write-Warn 'VSIX not found after packaging.' }
-                } catch {
-                    Write-Err 'Failed to package extension. Ensure vsce is available (npm i -g @vscode/vsce or use npx).'
+            try {
+                if (Test-Path (Join-Path $extDir 'node_modules/.bin/vsce.cmd')) {
+                    Write-Info 'Using local vsce via npm run package'
+                    $pkgOutput = npm run package 2>&1
+                } else {
+                    $vsceCmd = Get-Command vsce -ErrorAction SilentlyContinue
+                    if ($vsceCmd) {
+                        Write-Info 'Using globally installed vsce'
+                        $pkgOutput = vsce package 2>&1
+                    } else {
+                        Write-Info 'Using npx to run vsce'
+                        $pkgOutput = npx vsce package 2>&1
+                    }
                 }
+                Write-Info ($pkgOutput | Out-String)
+            } catch {
+                Write-Warn 'Packaging reported an error; will still look for VSIX.'
             }
 
-            if ($InstallExtension) {
-                if (-not $vsixPath) {
-                    # Locate latest VSIX if not packaged in this run
-                    $vsix = Get-ChildItem -Filter '*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                    if ($vsix) { $vsixPath = $vsix.FullName }
-                }
-                if ($vsixPath) {
-                    Write-Info "Installing VSIX into VS Code: $vsixPath"
-                    code --install-extension "$vsixPath"
-                } else {
-                    Write-Warn 'No VSIX found to install. Run with -PackageExtension or place a VSIX in vscode-extension.'
-                }
+            # Try to find generated VSIX in folder
+            $vsix = Get-ChildItem -Filter '*.vsix' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($vsix) { $vsixPath = $vsix.FullName; Write-Info "VSIX located: $vsixPath" }
+            else { Write-Err 'VSIX not found after packaging.' }
+
+            if ($vsixPath) {
+                Write-Info "Installing VSIX into VS Code: $vsixPath"
+                code --install-extension "$vsixPath"
             }
         }
         finally {
             Pop-Location
         }
     } else {
-        Write-Warn 'vscode-extension/package.json not found. Skipping extension steps.'
+        Write-Warn 'No VS Code extension package.json found. Skipping extension steps.'
     }
 }
 finally {
