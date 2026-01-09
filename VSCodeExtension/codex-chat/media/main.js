@@ -117,7 +117,7 @@
         const thinkingDiv = document.createElement('div');
         thinkingDiv.className = 'chat-entry assistant thinking';
         thinkingDiv.id = thinkingId;
-        thinkingDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span> <span id=\"stream-content\"></span>`;
+        thinkingDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span><br><span id=\"stream-content\"></span>`;
         chatLog.appendChild(thinkingDiv);
         chatLog.scrollTop = chatLog.scrollHeight;
         showSpinner(true);
@@ -177,6 +177,7 @@
         let inCodeBlock = false;
         let codeLines = [];
         let listType;
+        let paragraphLines = [];
 
         const closeList = () => {
             if (listType) {
@@ -185,8 +186,18 @@
             }
         };
 
+        const flushParagraph = () => {
+            if (paragraphLines.length > 0) {
+                const joined = paragraphLines.join('<br>');
+                html.push(`<p>${formatInline(joined)}</p>`);
+                paragraphLines = [];
+            }
+        };
+
         lines.forEach((line) => {
             if (line.trim().startsWith('```')) {
+                flushParagraph();
+                closeList();
                 if (!inCodeBlock) {
                     inCodeBlock = true;
                     codeLines = [];
@@ -204,13 +215,15 @@
 
             const trimmed = line.trim();
 
+            // Blank line → paragraph break
             if (!trimmed) {
                 closeList();
-                html.push('<br>');
+                flushParagraph();
                 return;
             }
 
             if (trimmed === '---') {
+                flushParagraph();
                 closeList();
                 html.push('<hr>');
                 return;
@@ -218,6 +231,7 @@
 
             const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
             if (headingMatch) {
+                flushParagraph();
                 closeList();
                 const level = headingMatch[1].length;
                 html.push(`<h${level}>${formatInline(headingMatch[2])}</h${level}>`);
@@ -226,6 +240,7 @@
 
             const unorderedMatch = trimmed.match(/^[-*]\s+(.*)$/);
             if (unorderedMatch) {
+                flushParagraph();
                 if (listType !== 'ul') {
                     closeList();
                     listType = 'ul';
@@ -237,6 +252,7 @@
 
             const orderedMatch = trimmed.match(/^\d+\.\s+(.*)$/);
             if (orderedMatch) {
+                flushParagraph();
                 if (listType !== 'ol') {
                     closeList();
                     listType = 'ol';
@@ -246,13 +262,15 @@
                 return;
             }
 
+            // Accumulate normal lines into current paragraph; single newlines → <br>
             closeList();
-            html.push(`<p>${formatInline(trimmed)}</p>`);
+            paragraphLines.push(trimmed);
         });
 
         if (inCodeBlock) {
             html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
         }
+        flushParagraph();
         closeList();
         return html.join('');
     }
@@ -318,7 +336,7 @@
                     const newDiv = document.createElement('div');
                     newDiv.className = 'chat-entry assistant thinking';
                     newDiv.id = 'thinking-entry';
-                    newDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span> <span id=\"stream-content\"></span>`;
+                    newDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span><br><span id=\"stream-content\"></span>`;
                     chatLog.appendChild(newDiv);
                     contentEl = newDiv.querySelector('#stream-content');
                 }
