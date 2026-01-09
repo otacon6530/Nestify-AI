@@ -23,11 +23,15 @@ def _run_stream(core: Core) -> int:
                     if isinstance(ev, dict) and ev.get("type") == "token":
                         sys.stdout.write(ev.get("value", ""))
                         sys.stdout.flush()
-                        sys.stdout.write("\r" + spinner[i % len(spinner)])
-                        sys.stdout.flush()
+                        # write spinner to stderr so it doesn't overwrite tokens
+                        sys.stderr.write("\r" + spinner[i % len(spinner)])
+                        sys.stderr.flush()
                         i += 1
                     elif isinstance(ev, dict) and ev.get("type") == "final":
-                        sys.stdout.write("\r \r\n")
+                        # clear spinner and end the line on stdout
+                        sys.stderr.write("\r \r")
+                        sys.stderr.flush()
+                        sys.stdout.write("\n")
                         sys.stdout.flush()
             except TypeError:
                 # Non-stream result fallback

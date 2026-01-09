@@ -23,13 +23,33 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
     url = (base_url or "").rstrip("/") + "/chat/completions"
     payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": stream}
     r = requests.post(url, json=payload, headers=headers, timeout=60, stream=stream)
+    r.raise_for_status()
     if stream:
         def gen():
-            for line in r.iter_lines(decode_unicode=True):
-                if not line:
+            collected = []
+            for raw in r.iter_lines(decode_unicode=True):
+                if not raw:
                     continue
-                yield {"type": "token", "value": line}
-            yield {"type": "final", "result": {"text": "", "model": model, "usage": {}}}
+                line = raw.strip()
+                if line.startswith("data:"):
+                    line = line[5:].strip()
+                if line == "[DONE]":
+                    break
+                try:
+                    evt = requests.utils.json.loads(line)
+                except Exception:
+                    continue
+                # Try common OpenAI-style delta paths
+                token = (
+                    evt.get("choices", [{}])[0].get("delta", {}).get("content")
+                    or evt.get("choices", [{}])[0].get("message", {}).get("content")
+                    or evt.get("content", "")
+                )
+                if token:
+                    collected.append(token)
+                    yield {"type": "token", "value": token}
+            full_text = "".join(collected)
+            yield {"type": "final", "result": {"text": full_text, "model": model, "usage": {}}}
         return gen()
     data = r.json()
     text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
