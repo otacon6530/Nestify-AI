@@ -28,9 +28,15 @@ def _run_stream(core: Core) -> int:
                         sys.stderr.flush()
                         i += 1
                     elif isinstance(ev, dict) and ev.get("type") == "final":
-                        # clear spinner and end the line on stdout
+                        # clear spinner
                         sys.stderr.write("\r \r")
                         sys.stderr.flush()
+                        # print final text if provided
+                        result = ev.get("result", {}) if isinstance(ev.get("result"), dict) else {}
+                        final_text = result.get("text", "")
+                        if final_text:
+                            sys.stdout.write(final_text)
+                        # end the line
                         sys.stdout.write("\n")
                         sys.stdout.flush()
             except TypeError:
