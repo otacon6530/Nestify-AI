@@ -44,6 +44,66 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 - VS Code: Extension communicates via Node/TypeScript, invokes Python core via CLI or Python bridge
 - CI: Linting (ruff), formatting (black), type checks (mypy), tests (pytest)
 
+## Core Design (v0.0.1)
+- Entry point: `core.py` orchestrates initialization and is the only place where class instances communicate with each other. Other modules must not directly depend on or call each other; they expose interfaces consumed by `core.py`.
+- Classes location: `classes/` folder contains all class definitions for the application.
+- Additional folders:
+  - `tools/`: Built-in and app-specific tools (e.g., VS Code-specific tools)
+  - `skills/`: OpenAI structured skills definitions
+  - `agents/`: Agent definitions with system prompts
+
+### Class Specifications
+1. `Config`
+  - Responsibility: Load and validate all configuration required to run the app.
+  - Sources: Reads `config.yaml`; supports environment variable overrides.
+  - Provides: Accessors for model provider settings, API keys, cache paths, runtime flags.
+
+2. `Logger`
+  - Responsibility: Multi-level logger with file output.
+  - Output: Writes to `log.txt` by default; supports levels (DEBUG/INFO/WARN/ERROR).
+  - Options: Consider rotation or size limits in future versions.
+
+3. `LLM`
+  - Responsibility: Communicate with OpenAI-compatible APIs.
+  - Interface: Adapter-based provider support; method like `generate(prompt, config) -> Result`.
+  - Config: Reads provider name, model, API key from `Config`.
+
+4. `Memory`
+  - Responsibility: Vector-based memory manager for storing and retrieving context.
+  - Backend: Pluggable (e.g., local embeddings + FAISS-like store) for v0.0.1 simple local implementation.
+  - API: `add(text, metadata)`, `search(query, top_k)`.
+
+5. `ToolManager`
+  - Responsibility: Import tools from `tools/`, register them, and provide invocation.
+  - Scope: Tools in `tools/` are globally available; support tagging to mark app-specific tools (e.g., VS Code-only).
+  - Metadata: Pass structured metadata/context into tool calls; integrate tools provided by `MCP`.
+
+6. `SkillsManager`
+  - Responsibility: Load and use OpenAI structured skills from `skills/`.
+  - API: Register skills, validate schemas, expose skills to `LLM` or `Agent` workflows.
+
+7. `MCP`
+  - Responsibility: Connect to an MCP server and consume its tools.
+  - Integration: Feed discovered tools into `ToolManager` for unified invocation.
+
+8. `Agent`
+  - Responsibility: Manage system prompts and agent behaviors; load agent definitions from `agents/`.
+  - Config: Assign agents to tasks via configuration (tools may define tasks).
+  - API: `prepare_context(task, config, memory) -> PromptContext`.
+
+### Communication Constraints
+- `core.py` is the orchestration layer:
+  - Instantiates `Config`, `Logger`, `LLM`, `Memory`, `ToolManager`, `SkillsManager`, `MCP`, and `Agent`.
+  - Wires instances together by passing references only within `core.py`.
+  - Other classes remain loosely coupled and unaware of each other beyond their public interfaces.
+
+### Example Flow
+1. `core.py` loads `Config` and initializes `Logger`.
+2. Initialize `LLM` with provider settings; initialize `Memory`.
+3. `ToolManager` loads tools from `tools/` and `MCP` adds remote tools.
+4. `SkillsManager` loads skills; `Agent` selects system prompt based on task.
+5. Execute a task: `Agent` prepares context; `LLM` generates; `ToolManager` handles tool calls; `Memory` stores relevant artifacts; `Logger` records events.
+
 ## Tech Stack Decisions
 - Python: 3.11+, `pyproject.toml` for packaging and dependencies
 - CLI: `typer` or `argparse` for commands; rich for output formatting
