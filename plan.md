@@ -76,6 +76,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - Responsibility: Communicate with OpenAI-compatible APIs.
   - Interface: Adapter-based provider support; method like `generate(prompt, config) -> Result`.
   - Config: Reads provider name, model, API key from `Config`.
+  - Streaming: Default behavior is token streaming end-to-end. The CLI `nestify run` and VS Code extension stream outputs; `nestify exec --message` does not stream and returns a single final result.
 
 4. `Memory`
   - Responsibility: Vector-based memory manager for storing and retrieving context.
@@ -137,6 +138,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 - VS Code: TypeScript extension using the VS Code API, communicating with CLI/core
 - Testing: `pytest` with unit tests for core abstractions and CLI commands
 - Tooling: `ruff` (lint), `black` (format), `mypy` (types), `pre-commit`
+ - Tests layout: `tests/` with `tests/functions/` and `tests/classes/` to mirror implementation areas.
 
 ## Data Model (Draft)
 - Entities: List core models and relationships.
@@ -158,9 +160,11 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
   - `nestify eval <runs_dir> [--metric ...]`
   - `nestify config set/get <key> [value]`
   - `nestify exec --message "<text>"`
+  - Streaming behavior: `run` streams by default (offer `--no-stream` to disable); `exec` never streams.
 - VS Code Extension:
   - Commands: Run current file, show output panel, toggle model/config
   - Settings: Model, API key, cache dir
+  - Streaming: Streams tokens by default to the output panel; adheres to the same non-stream policy for `exec`.
 
 ## Milestones & Timeline
 - Milestone 1 (Core & CLI): Scaffolding, basic `ModelClient`, `Executor`, `nestify run/config`, tests
@@ -187,3 +191,4 @@ Additional Risks (LLM-specific): Provider API changes, rate limits, prompt injec
 - Initialize VS Code extension structure and command palette entries
 - Set up tooling: ruff, black, mypy, pytest, pre-commit
 - Define `pyproject.toml`, basic dependency set, and version `0.0.1`
+ - Add `scripts/build.ps1` to build the core package (when `pyproject.toml` is present) and run tests (pytest); document usage in README.
