@@ -1,31 +1,39 @@
 # Nestify
 
-Core + CLI scaffolding is implemented.
+Core + CLI implemented; VS Code extension scaffold with Python bridge.
 
-- Exec: `nestify exec "hello world"`
-- Run (streaming): `nestify run`
-- Shell with approvals: `nestify shell "dir"`
+## Quick Start (Windows, PowerShell)
+- Create/activate venv and install:
+	- `.\.venv\Scripts\Activate.ps1`
+	- `& "G:\Dev\Nestify\.venv\Scripts\python.exe" -m pip install -e .`
+- Run CLI:
+	- Chat (streaming): `nestify run`
+	- Exec (non-stream): `nestify exec "hello world"`
+	- Shell with approvals: `nestify shell "echo hi"`
+- If `nestify` isn’t on PATH after activation:
+	- `& "G:\Dev\Nestify\.venv\Scripts\python.exe" -m nestify_cli.main run`
 
-Configuration: see config.yaml. You can set environment overrides: `NESTIFY_PROVIDER`, `NESTIFY_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
+## Configuration
+- Edit [config.yaml](config.yaml) or use env vars: `NESTIFY_PROVIDER`, `NESTIFY_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
+- For a quick streaming check, set `llm.provider: echo` and `llm.model: local-echo`.
+- OpenAI-compatible servers: ensure `/chat/completions` supports `stream: true`.
 
-Logs: `%LOCALAPPDATA%/Nestify/logs/log.jsonl`.
-# Nestify
+## Logs
+- JSONL logs: `%LOCALAPPDATA%/Nestify/logs/log.jsonl`.
 
-Basic project initialization.
+## VS Code Extension
+- Folder: [vscode-extension](vscode-extension)
+- Setup:
+	- `Set-Location G:\Dev\Nestify\vscode-extension`
+	- `npm install`
+	- `npm run watch`
+	- Press F5 in VS Code to launch the Extension Development Host
+	- Command Palette: “Nestify: Open Chat”
+	- Settings: set `nestify.pythonPath` to your venv Python (e.g., `G:/Dev/Nestify/.venv/Scripts/python.exe`)
 
-## Getting Started
+## Build & Docs
+- See [docs/BUILD.md](docs/BUILD.md) for build and test steps.
 
-1. Ensure Git is installed.
-2. Clone or open this folder.
-3. Optional: create an `.env` or `.env.local` for local configs.
-
-## What’s Included
-
-- Generic `.gitignore` covering OS/editor artifacts, logs, env files, Node, and Python.
-- Minimal README.
-
-## Next Steps
-
-- Decide on tech stack (e.g., NestJS, Python, etc.).
-- Add project scaffolding (e.g., `src/` structure) and tooling.
-- Initialize package manager or virtual environment as needed.
+## Notes
+- If streaming doesn’t show tokens, try echo provider or verify your server’s SSE format.
+- If PATH issues prevent `nestify` from running, use the module form shown above.
