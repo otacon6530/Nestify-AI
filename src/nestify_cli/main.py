@@ -16,7 +16,7 @@ def _run_stream(core: Core) -> int:
                 continue
             print("[sending] ...")
             printed = False
-            events = core.llm.generate(msg, stream=True)
+            events = core.generate(msg, stream=True)
             try:
                 for ev in events:
                     if isinstance(ev, dict) and ev.get("type") == "token":
@@ -42,7 +42,7 @@ def _run_stream(core: Core) -> int:
                         printed = True
             # If nothing was printed during streaming, fallback to non-stream call
             if not printed:
-                res = core.llm.generate(msg, stream=False)
+                res = core.generate(msg, stream=False)
                 if isinstance(res, dict):
                     txt = res.get("output") or res.get("text") or ""
                     if txt:

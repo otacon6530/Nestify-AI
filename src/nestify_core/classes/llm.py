@@ -16,7 +16,20 @@ class LLM:
         # Bind methods
         self.generate = lambda prompt, **kwargs: self._generate_impl(prompt, **kwargs)
         self.probe = self._probe_impl
-        self.probe()
+        self.embed = self._embed_impl
+    
+    def _embed_impl(self, text: str):
+        """
+        Return embedding vector for text/code using the configured provider/model.
+        If no embedding model is configured, returns None.
+        """
+        # Example: OpenAI embedding API, HuggingFace, or local model
+        # This is a stub; replace with actual embedding logic
+        if hasattr(self, "embedding_model") and self.embedding_model:
+            # Call your embedding model here
+            return self.embedding_model.embed(text)
+        # Fallback: None (disables semantic search)
+        return None
 
     def _probe_impl(self) -> ProbeResult:
         if self.provider == "openai":

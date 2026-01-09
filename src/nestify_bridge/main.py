@@ -26,7 +26,7 @@ def main():
             continue
         if msg.get("type") == "exec":
             text = msg.get("text", "")
-            events = core.llm.generate(text, stream=True)
+            events = core.generate(text, stream=True)
             try:
                 for ev in events:
                     if isinstance(ev, dict) and ev.get("type") == "token":

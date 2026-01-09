@@ -1,3 +1,4 @@
+
 """
 core.py - Nestify Core Orchestration
 
@@ -11,6 +12,7 @@ Key responsibilities:
 
 Copyright (c) Nestify contributors. MIT License.
 """
+
 
 from __future__ import annotations
 import sys
@@ -41,7 +43,7 @@ class Core:
         self.config = Config()
         self.logger = Logger()
         self.llm = LLM(self.config, self.logger)
-        self.memory = Memory()
+        self.memory = Memory(self.llm.embed)
         self.tool_manager = ToolManager()
         self.skills_manager = SkillsManager(self.tool_manager)
         self.mcp = MCP()
@@ -52,6 +54,20 @@ class Core:
         Old code that should be removed in future versions.
         """
         return
+    
+    def generate(self, text: str, **kwargs):
+        """
+        Generate a response from the LLM, optionally including memory context.
+        Args:
+            text: User query or prompt.
+            kwargs: Additional arguments for LLM (e.g., stream=True).
+        Returns:
+            LLM response (stream or dict).
+        """
+        context_items = self.memory.search(text, top_k=3)
+        context_text = "\n---\n".join(item["text"] for item in context_items)
+        self.memory.add(text, metadata={"source": "user"})
+        return self.llm.generate(f"{context_text}\n\nUser: {text}", **kwargs)
         
     def exec_once(self, text: str) -> int:
         """
@@ -59,7 +75,7 @@ class Core:
         Returns 0 on success, or error exit code on failure.
         """
         try:
-            result = self.llm.generate(text)
+            result = self.generate(text)
             self.logger.log("INFO", "exec result")
             sys.stdout.write(result.get("output", "") + "\n")
             sys.stdout.flush()
