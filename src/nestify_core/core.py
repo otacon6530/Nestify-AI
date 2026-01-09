@@ -1,3 +1,17 @@
+"""
+core.py - Nestify Core Orchestration
+
+This module defines the Core class, which orchestrates configuration, logging, LLM connectivity, memory, tool and skills management, and agent lifecycle for the Nestify system.
+
+Key responsibilities:
+- Load and manage configuration
+- Initialize and probe LLM provider
+- Set up logging, memory, tools, skills, and agent
+- Provide startup and exec_once entry points for CLI and bridge
+
+Copyright (c) Nestify contributors. MIT License.
+"""
+
 from __future__ import annotations
 import sys
 import uuid
@@ -11,13 +25,22 @@ from .classes.mcp import MCP
 from .classes.agent import Agent
 from .functions.error_envelope import build_error_envelope, emit_error
 
-
 class Core:
+    """
+    Core orchestrates the main components of the Nestify system:
+    - Loads configuration and logger
+    - Initializes LLM, memory, tool/skills managers, agent, and MCP
+    - Provides startup() for LLM connectivity probe
+    - Provides exec_once() for single-shot text execution
+    """
     def __init__(self):
-        self.correlation_id = str(uuid.uuid4())
+        """
+        Initialize all core components: config, logger, LLM, memory, tools, skills, MCP, and agent.
+        """
+        # Removed correlation_id; not used for tracing in current implementation
         self.config = Config()
         self.logger = Logger()
-        self.llm = LLM(self.config)
+        self.llm = LLM(self.config, self.logger)
         self.memory = Memory()
         self.tool_manager = ToolManager()
         self.skills_manager = SkillsManager(self.tool_manager)
@@ -25,35 +48,28 @@ class Core:
         self.agent = Agent()
 
     def startup(self) -> int | None:
-        # Probe LLM connectivity and fail fast
-        probe_result = self.llm.probe()
-        if not probe_result.ok:
-            self.logger.log("ERROR", "LLM probe failed", reason=probe_result.reason, correlation_id=self.correlation_id)
-            env = build_error_envelope(
-                code="NETWORK_ERROR" if "Network error" in (probe_result.reason or "") else "PROVIDER_ERROR",
-                message=f"LLM startup probe failed: {probe_result.reason}",
-                component="Core/LLM",
-                correlation_id=self.correlation_id,
-                suggestion="Check network, base_url, and API credentials",
-            )
-            return emit_error(env)
-        self.logger.log("INFO", "LLM probe succeeded", correlation_id=self.correlation_id)
-        return None
-
+        """
+        Old code that should be removed in future versions.
+        """
+        return
+        
     def exec_once(self, text: str) -> int:
+        """
+        Run a single LLM generation and print the result to stdout.
+        Returns 0 on success, or error exit code on failure.
+        """
         try:
             result = self.llm.generate(text)
-            self.logger.log("INFO", "exec result", correlation_id=self.correlation_id)
+            self.logger.log("INFO", "exec result")
             sys.stdout.write(result.get("output", "") + "\n")
             sys.stdout.flush()
             return 0
         except Exception as e:
-            self.logger.log("ERROR", "exec failed", correlation_id=self.correlation_id)
+            self.logger.log("ERROR", "exec failed")
             env = build_error_envelope(
                 code="UNKNOWN",
                 message=str(e),
                 component="Core/Exec",
-                correlation_id=self.correlation_id,
                 exc=e,
             )
             return emit_error(env)

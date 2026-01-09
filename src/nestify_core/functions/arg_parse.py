@@ -26,7 +26,6 @@ def parse(argv: list[str]) -> dict:
             "shell_command": getattr(args, "cmd", None),
             "mode": getattr(args, "mode", "default"),
             "debug_stream": bool(getattr(args, "debug_stream", False)),
-            "correlation_id": str(uuid.uuid4()),
         }
     except SystemExit as e:
         # Argparse error; surface a structured error for CLI to emit

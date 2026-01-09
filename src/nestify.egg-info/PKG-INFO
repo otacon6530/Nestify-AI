@@ -5,8 +5,10 @@ Summary: Nestify Core and CLI
 Author: Nestify
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: PyYAML>=6.0
 Requires-Dist: requests>=2.31.0
+Dynamic: license-file
 
 # Nestify
 

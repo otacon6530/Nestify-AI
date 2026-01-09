@@ -15,7 +15,7 @@ EXIT_CODES = {
 }
 
 
-def build_error_envelope(code: str, message: str, component: str, correlation_id: str, suggestion: str | None = None, exc: BaseException | None = None):
+def build_error_envelope(code: str, message: str, component: str, suggestion: str | None = None, exc: BaseException | None = None):
     stack = []
     if exc is not None:
         stack = traceback.format_exception(type(exc), exc, exc.__traceback__)
@@ -25,7 +25,6 @@ def build_error_envelope(code: str, message: str, component: str, correlation_id
         "component": component,
         "stack": stack,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "correlation_id": correlation_id,
         "suggestion": suggestion,
     }
 
