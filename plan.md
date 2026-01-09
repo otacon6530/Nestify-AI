@@ -161,10 +161,26 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
   - `nestify config set/get <key> [value]`
   - `nestify exec --message "<text>"`
   - Streaming behavior: `run` streams by default (offer `--no-stream` to disable); `exec` never streams.
+  - Session Modes:
+    - Continuous Chat (default): interactive, streaming tokens as they arrive; input gated until final response to maintain parity with the extension
+    - One-and-Done Exec: `nestify exec --message "<text>"` performs a single execution without establishing a chat session, returns a final non-streamed result
+  - Core Bridge & UX Parity:
+    - Uses the Python Core directly (no intermediate server) and emits the same unified error envelope as the VS Code extension
+    - Chat semantics mirror the extension: single-message send is gated until final response; show a spinner/progress indicator while the Core is working
+    - Mode selection equivalent to the extension dropdown via `--mode default|plan` (Default is the default)
+    - Input is blocked until the final assistant response is printed; spinner/progress stops upon completion
 - VS Code Extension:
   - Commands: Run current file, show output panel, toggle model/config
   - Settings: Model, API key, cache dir
   - Streaming: Streams tokens by default to the output panel; adheres to the same non-stream policy for `exec`.
+  - Core Bridge: Uses a Python bridge to interact with the Core directly (preferred over CLI invocation) for lower latency and richer IPC.
+  - Chat UI:
+    - Layout: A chat view with a message box at the bottom
+    - Left of message box: a dropdown with options `Default` and `Plan`
+    - Right of message box: a Send button
+    - Send behavior: when a message is sent, the Send button becomes grey (disabled) and prevents additional sends until the final assistant response is received from the Core and rendered
+    - Work-in-progress indicator: while the Core is working, show a spinning circle in the active chat line
+    - Completion: once the final response is displayed, remove the spinner and re-enable the Send button
 
 ## Milestones & Timeline
 - Milestone 1 (Core & CLI): Scaffolding, basic `ModelClient`, `Executor`, `nestify run/config`, tests
