@@ -1,0 +1,17 @@
+[project]
+name = "nestify"
+version = "0.0.1"
+description = "Nestify Core and CLI"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Nestify" }]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+nestify = "nestify_cli.main:app_main"

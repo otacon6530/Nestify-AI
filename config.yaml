@@ -1,0 +1,6 @@
+llm:
+  provider: echo
+  model: local-echo
+probe:
+  timeout_seconds: 5
+  retry: true
