@@ -10,7 +10,7 @@ def generate_echo(prompt: str, model: str, **kwargs) -> dict:
     }
 
 
- def generate_echo_stream(prompt: str, model: str):
-     for w in prompt.split():
-         yield {"type": "token", "value": w + " "}
-     yield {"type": "final", "result": {"text": prompt, "model": model, "usage": {}}}
+def generate_echo_stream(prompt: str, model: str):
+    for w in prompt.split():
+        yield {"type": "token", "value": w + " "}
+    yield {"type": "final", "result": {"text": prompt, "model": model, "usage": {}}}
