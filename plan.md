@@ -78,6 +78,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - Interface: Adapter-based provider support; method like `generate(prompt, config) -> Result`.
   - Config: Reads provider name, model, API key from `Config`.
   - Streaming: Default behavior is token streaming end-to-end. The CLI `nestify run` and VS Code extension stream outputs; `nestify exec "<text>"` does not stream and returns a single final result.
+  - Startup Connectivity Probe: On application startup, perform a health check to the configured LLM provider (e.g., a lightweight request such as `models.list` or a minimal `echo` call). If unreachable or unauthorized, fail fast by emitting a unified error envelope and exiting with an appropriate code (NETWORK_ERROR for connectivity/DNS/timeouts; PROVIDER_ERROR for authentication/invalid config). Include a configurable timeout (default 5s) and a single optional retry with short backoff; log the probe result.
 
 4. `Memory`
   - Responsibility: Vector-based memory manager for storing and retrieving context.
@@ -131,9 +132,10 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 ### Example Flow
 1. `core.py` loads `Config` and initializes `Logger`.
 2. Initialize `LLM` with provider settings; initialize `Memory`.
-3. `ToolManager` loads tools from `tools/` and `MCP` adds remote tools.
-4. `SkillsManager` loads skills; `Agent` selects system prompt based on task.
-5. Execute a task: `Agent` prepares context; `LLM` generates; `ToolManager` handles tool calls; `Memory` stores relevant artifacts; `Logger` records events.
+3. Probe LLM connectivity immediately: perform the startup health check and either continue on success or emit a unified error envelope and exit early on failure.
+4. `ToolManager` loads tools from `tools/` and `MCP` adds remote tools.
+5. `SkillsManager` loads skills; `Agent` selects system prompt based on task.
+6. Execute a task: `Agent` prepares context; `LLM` generates; `ToolManager` handles tool calls; `Memory` stores relevant artifacts; `Logger` records events.
 
 ## Tech Stack Decisions
 - Python: 3.11+, `pyproject.toml` for packaging and dependencies
