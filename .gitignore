@@ -4,6 +4,7 @@
 .DS_Store
 Thumbs.db
 .vscode/
+.vs/
 .idea/
 *.code-workspace
 
@@ -62,3 +63,4 @@ pip-wheel-metadata/
 .cache/
 .ruff_cache/
 .eslintcache
+
