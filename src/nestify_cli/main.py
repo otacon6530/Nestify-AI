@@ -17,6 +17,7 @@ def _run_stream(core: Core) -> int:
                 continue
             print("[sending] ...")
             i = 0
+            printed = False
             events = core.llm.generate(msg, stream=True)
             try:
                 for ev in events:
@@ -27,6 +28,7 @@ def _run_stream(core: Core) -> int:
                         sys.stderr.write("\r" + spinner[i % len(spinner)])
                         sys.stderr.flush()
                         i += 1
+                        printed = True
                     elif isinstance(ev, dict) and ev.get("type") == "final":
                         # clear spinner
                         sys.stderr.write("\r \r")
@@ -36,12 +38,21 @@ def _run_stream(core: Core) -> int:
                         final_text = result.get("text", "")
                         if final_text:
                             sys.stdout.write(final_text)
+                            printed = True
                         # end the line
                         sys.stdout.write("\n")
                         sys.stdout.flush()
             except TypeError:
                 # Non-stream result fallback
                 res = events
+                if isinstance(res, dict):
+                    txt = res.get("output") or res.get("text") or ""
+                    if txt:
+                        print(txt)
+                        printed = True
+            # If nothing was printed during streaming, fallback to non-stream call
+            if not printed:
+                res = core.llm.generate(msg, stream=False)
                 if isinstance(res, dict):
                     txt = res.get("output") or res.get("text") or ""
                     if txt:
