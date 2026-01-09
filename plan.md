@@ -67,7 +67,10 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 2. `Logger`
   - Responsibility: Multi-level logger with file output.
   - Output: Writes to `log.txt` by default; supports levels (DEBUG/INFO/WARN/ERROR).
-  - Options: Consider rotation or size limits in future versions.
+  - Fields: datetime, level, file, line, message.
+  - Rotation: Size-based rotation (default max size 10 MB, retain 5 files).
+  - Location (Windows): %LOCALAPPDATA%/Nestify/logs/.
+  - Format: JSON Lines (JSONL), one event per line for machine-readable logs.
 
 3. `LLM`
   - Responsibility: Communicate with OpenAI-compatible APIs.
@@ -97,11 +100,29 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - Config: Assign agents to tasks via configuration (tools may define tasks).
   - API: `prepare_context(task, config, memory) -> PromptContext`.
 
+9. `ArgManager`
+  - Responsibility: Parse and validate core arguments independent of the CLI framework; provide consistent usage/help for both CLI and VS Code.
+  - Interface: parse(argv) -> Args; usage() -> str; validate(args) -> None | ErrorEnvelope.
+  - Supported Args: --help; exec --message "<text>" (single execute payload).
+  - Behavior: Returns structured Args with mode, message, and a correlation_id; invalid inputs yield ErrorEnvelope with code=INVALID_ARGUMENT.
+  - Integration: CLI delegates to ArgManager to ensure consistent parsing/validation across surfaces.
+
 ### Communication Constraints
 - `core.py` is the orchestration layer:
   - Instantiates `Config`, `Logger`, `LLM`, `Memory`, `ToolManager`, `SkillsManager`, `MCP`, and `Agent`.
   - Wires instances together by passing references only within `core.py`.
   - Other classes remain loosely coupled and unaware of each other beyond their public interfaces.
+
+### Error Handling & Unified Envelope
+- `core.py` wraps end-to-end orchestration in a single try block. Any uncaught exception is captured and emitted as a standardized error envelope consumable by both the CLI and VS Code extension.
+- Error Envelope Schema:
+  - code (string), message (string), component (string), stack (string[]), timestamp (ISO 8601), correlation_id (string), suggestion (string | null)
+- Transport:
+  - CLI: prints the envelope as JSON to stderr and maps to exit codes
+  - VS Code: returns the envelope over IPC to the extension
+- Exit Code Mapping:
+  - 0 OK; 1 UNKNOWN; 2 INVALID_ARGUMENT; 3 CONFIG_ERROR; 4 NETWORK_ERROR; 5 PROVIDER_ERROR; 6 PERMISSION_DENIED; 7 TIMEOUT
+- Logging: The envelope is logged by Logger with level=ERROR as a JSONL event.
 
 ### Example Flow
 1. `core.py` loads `Config` and initializes `Logger`.
@@ -136,6 +157,7 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
   - `nestify run <prompt_file> [--model ...] [--vars ...]`
   - `nestify eval <runs_dir> [--metric ...]`
   - `nestify config set/get <key> [value]`
+  - `nestify exec --message "<text>"`
 - VS Code Extension:
   - Commands: Run current file, show output panel, toggle model/config
   - Settings: Model, API key, cache dir
