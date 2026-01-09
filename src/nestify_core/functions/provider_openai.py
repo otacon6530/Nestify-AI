@@ -1,0 +1,36 @@
+from __future__ import annotations
+import requests
+from .llm_probe import ProbeResult
+
+
+def probe_openai(base_url: str | None, api_key: str | None, timeout_seconds: int) -> ProbeResult:
+    if not base_url:
+        return ProbeResult(False, "Missing base_url for OpenAI provider")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    url = base_url.rstrip("/") + "/models"
+    try:
+        r = requests.get(url, headers=headers, timeout=timeout_seconds)
+        if 200 <= r.status_code < 300:
+            return ProbeResult(True)
+        return ProbeResult(False, f"Status {r.status_code}")
+    except Exception as e:
+        return ProbeResult(False, f"Network error: {e}")
+
+
+def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str | None, **kwargs):
+    stream = bool(kwargs.get("stream", False))
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"} if api_key else {"Content-Type": "application/json"}
+    url = (base_url or "").rstrip("/") + "/chat/completions"
+    payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": stream}
+    r = requests.post(url, json=payload, headers=headers, timeout=60, stream=stream)
+    if stream:
+        def gen():
+            for line in r.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                yield {"type": "token", "value": line}
+            yield {"type": "final", "result": {"text": "", "model": model, "usage": {}}}
+        return gen()
+    data = r.json()
+    text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    return {"provider": "openai", "model": model, "output": text, "usage": data.get("usage", {})}

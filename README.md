@@ -1,5 +1,16 @@
 # Nestify
 
+Core + CLI scaffolding is implemented.
+
+- Exec: `nestify exec "hello world"`
+- Run (streaming): `nestify run`
+- Shell with approvals: `nestify shell "dir"`
+
+Configuration: see config.yaml. You can set environment overrides: `NESTIFY_PROVIDER`, `NESTIFY_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
+
+Logs: `%LOCALAPPDATA%/Nestify/logs/log.jsonl`.
+# Nestify
+
 Basic project initialization.
 
 ## Getting Started
