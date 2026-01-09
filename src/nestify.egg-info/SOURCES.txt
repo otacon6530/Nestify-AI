@@ -6,6 +6,7 @@ src/nestify.egg-info/dependency_links.txt
 src/nestify.egg-info/entry_points.txt
 src/nestify.egg-info/requires.txt
 src/nestify.egg-info/top_level.txt
+src/nestify_bridge/main.py
 src/nestify_cli/__init__.py
 src/nestify_cli/main.py
 src/nestify_core/__init__.py
@@ -28,3 +29,5 @@ src/nestify_core/functions/llm_probe.py
 src/nestify_core/functions/logger_init.py
 src/nestify_core/functions/logger_path.py
 src/nestify_core/functions/provider_openai.py
+src/nestify_core/tools/__init__.py
+src/nestify_core/tools/shell.py

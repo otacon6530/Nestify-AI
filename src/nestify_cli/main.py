@@ -2,6 +2,8 @@ from __future__ import annotations
 import sys
 import time
 from nestify_core.core import Core
+from nestify_core.functions.error_envelope import build_error_envelope, emit_error
+import uuid
 from nestify_core.classes.arg_manager import ArgManager
 
 
@@ -74,6 +76,19 @@ def _shell_with_approval(cmd: str) -> int:
 def app_main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv[1:]
     args = ArgManager().parse(argv)
+    if isinstance(args, dict) and args.get("error"):
+        env = build_error_envelope(
+            code="INVALID_ARGUMENT",
+            message=args.get("message", "Invalid arguments"),
+            component="CLI/ArgManager",
+            correlation_id=args.get("correlation_id", str(uuid.uuid4())),
+            suggestion="Use: nestify run | nestify exec \"<text>\" | nestify shell \"<cmd>\"",
+        )
+        rc = emit_error(env)
+        usage = args.get("usage")
+        if usage:
+            sys.stderr.write(usage)
+        return args.get("exit_code", rc)
     core = Core()
     startup_status = core.startup()
     if startup_status is not None:

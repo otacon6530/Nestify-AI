@@ -1,2 +1,3 @@
 [console_scripts]
 nestify = nestify_cli.main:app_main
+nestify-bridge = nestify_bridge.main:main

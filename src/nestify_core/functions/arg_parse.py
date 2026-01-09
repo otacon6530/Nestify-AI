@@ -15,11 +15,21 @@ def parse(argv: list[str]) -> dict:
     shell_p = subparsers.add_parser("shell")
     shell_p.add_argument("cmd", type=str, help="Shell command to run with approval flow")
 
-    args = parser.parse_args(argv)
-    return {
-        "command": args.command,
-        "message": getattr(args, "text", None),
-        "shell_command": getattr(args, "cmd", None),
-        "mode": getattr(args, "mode", "default"),
-        "correlation_id": str(uuid.uuid4()),
-    }
+    try:
+        args = parser.parse_args(argv)
+        return {
+            "command": args.command,
+            "message": getattr(args, "text", None),
+            "shell_command": getattr(args, "cmd", None),
+            "mode": getattr(args, "mode", "default"),
+            "correlation_id": str(uuid.uuid4()),
+        }
+    except SystemExit as e:
+        # Argparse error; surface a structured error for CLI to emit
+        return {
+            "error": "INVALID_ARGUMENT",
+            "message": "Invalid CLI arguments",
+            "usage": parser.format_usage(),
+            "exit_code": int(getattr(e, "code", 2) or 2),
+            "correlation_id": str(uuid.uuid4()),
+        }
