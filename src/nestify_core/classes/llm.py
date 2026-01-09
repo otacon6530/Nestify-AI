@@ -1,5 +1,5 @@
 from __future__ import annotations
-from ..functions.llm_generate import generate_echo
+from ..functions.llm_generate import generate_echo, generate_echo_stream
 from ..functions.llm_probe import probe, ProbeResult
 from ..functions.provider_openai import generate_openai, probe_openai
 
@@ -21,7 +21,10 @@ class LLM:
         return probe(self.provider, self.base_url, self.timeout_seconds)
 
     def _generate_impl(self, prompt: str, **kwargs):
+        stream = bool(kwargs.get("stream", False))
         if self.provider == "echo":
+            if stream:
+                return generate_echo_stream(prompt, self.model)
             return generate_echo(prompt, self.model, **kwargs)
         if self.provider == "openai":
             return generate_openai(prompt, self.model, self.base_url, self.api_key, **kwargs)

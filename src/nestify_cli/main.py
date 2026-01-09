@@ -15,16 +15,25 @@ def _run_stream(core: Core) -> int:
                 continue
             print("[sending] ...")
             i = 0
-            for ev in core.llm.generate(msg, stream=True):
-                if isinstance(ev, dict) and ev.get("type") == "token":
-                    sys.stdout.write(ev.get("value", ""))
-                    sys.stdout.flush()
-                    sys.stdout.write("\r" + spinner[i % len(spinner)])
-                    sys.stdout.flush()
-                    i += 1
-                elif isinstance(ev, dict) and ev.get("type") == "final":
-                    sys.stdout.write("\r \r\n")
-                    sys.stdout.flush()
+            events = core.llm.generate(msg, stream=True)
+            try:
+                for ev in events:
+                    if isinstance(ev, dict) and ev.get("type") == "token":
+                        sys.stdout.write(ev.get("value", ""))
+                        sys.stdout.flush()
+                        sys.stdout.write("\r" + spinner[i % len(spinner)])
+                        sys.stdout.flush()
+                        i += 1
+                    elif isinstance(ev, dict) and ev.get("type") == "final":
+                        sys.stdout.write("\r \r\n")
+                        sys.stdout.flush()
+            except TypeError:
+                # Non-stream result fallback
+                res = events
+                if isinstance(res, dict):
+                    txt = res.get("output") or res.get("text") or ""
+                    if txt:
+                        print(txt)
             print("[done]")
     except KeyboardInterrupt:
         print("\nBye.")
