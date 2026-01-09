@@ -76,7 +76,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - Responsibility: Communicate with OpenAI-compatible APIs.
   - Interface: Adapter-based provider support; method like `generate(prompt, config) -> Result`.
   - Config: Reads provider name, model, API key from `Config`.
-  - Streaming: Default behavior is token streaming end-to-end. The CLI `nestify run` and VS Code extension stream outputs; `nestify exec --message` does not stream and returns a single final result.
+  - Streaming: Default behavior is token streaming end-to-end. The CLI `nestify run` and VS Code extension stream outputs; `nestify exec "<text>"` does not stream and returns a single final result.
 
 4. `Memory`
   - Responsibility: Vector-based memory manager for storing and retrieving context.
@@ -104,7 +104,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 9. `ArgManager`
   - Responsibility: Parse and validate core arguments independent of the CLI framework; provide consistent usage/help for both CLI and VS Code.
   - Interface: parse(argv) -> Args; usage() -> str; validate(args) -> None | ErrorEnvelope.
-  - Supported Args: --help; exec --message "<text>" (single execute payload).
+  - Supported Args: --help; exec "<text>" (single execute payload).
   - Behavior: Returns structured Args with mode, message, and a correlation_id; invalid inputs yield ErrorEnvelope with code=INVALID_ARGUMENT.
   - Integration: CLI delegates to ArgManager to ensure consistent parsing/validation across surfaces.
 
@@ -156,14 +156,11 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
   - `Executor`: run(prompt, model, config) -> Result
   - `ProviderAdapter`: OpenAI/others; configurable via environment and config files
 - CLI commands (initial):
-  - `nestify run <prompt_file> [--model ...] [--vars ...]`
-  - `nestify eval <runs_dir> [--metric ...]`
-  - `nestify config set/get <key> [value]`
-  - `nestify exec --message "<text>"`
+  - `nestify exec "<text>"`
   - Streaming behavior: `run` streams by default (offer `--no-stream` to disable); `exec` never streams.
   - Session Modes:
     - Continuous Chat (default): interactive, streaming tokens as they arrive; input gated until final response to maintain parity with the extension
-    - One-and-Done Exec: `nestify exec --message "<text>"` performs a single execution without establishing a chat session, returns a final non-streamed result
+    - One-and-Done Exec: `nestify exec "<text>"` performs a single execution without establishing a chat session, returns a final non-streamed result
   - Core Bridge & UX Parity:
     - Uses the Python Core directly (no intermediate server) and emits the same unified error envelope as the VS Code extension
     - Chat semantics mirror the extension: single-message send is gated until final response; show a spinner/progress indicator while the Core is working
@@ -181,6 +178,17 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
     - Send behavior: when a message is sent, the Send button becomes grey (disabled) and prevents additional sends until the final assistant response is received from the Core and rendered
     - Work-in-progress indicator: while the Core is working, show a spinning circle in the active chat line
     - Completion: once the final response is displayed, remove the spinner and re-enable the Send button
+
+## CLI Design (v0.0.1)
+- Entry point: `main.py` orchestrates CLI logic and is the only place where CLI class instances communicate with each other, mirroring the Core’s `core.py` orchestration.
+- Folders:
+  - `classes/`: CLI-specific classes (e.g., `ArgManager`, session handlers)
+  - `functions/`: Reusable function implementations bound to CLI classes during initialization
+  - `tests/classes/` and `tests/functions/`: Test layout mirroring the implementation structure
+- Behavior Parity:
+  - Uses the Python Core via bridge; unified error envelope; streaming defaults for continuous chat
+  - `nestify exec "<text>"` performs a one-and-done execution (non-stream)
+  - Mode selection via `--mode default|plan`; input gating and progress spinner semantics match the VS Code extension
 
 ## Milestones & Timeline
 - Milestone 1 (Core & CLI): Scaffolding, basic `ModelClient`, `Executor`, `nestify run/config`, tests
