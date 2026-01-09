@@ -1,11 +1,10 @@
 llm:
-  provider: echo
-  model: local-echo
   # OpenAI configuration (uncomment and set to use OpenAI):
-  # provider: openai
-  # model: gpt-4o-mini
-  # api_key: YOUR_OPENAI_API_KEY
-  # base_url: https://api.openai.com/v1
+  provider: openai
+  model: qwen3:8b
+  api_key: YOUR_OPENAI_API_KEY
+  base_url: http://apple.stephensdev.com:11434/v1
+
 probe:
   timeout_seconds: 5
   retry: true
