@@ -1,0 +1,64 @@
+# Generic .gitignore
+
+# OS & editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs & temporary files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.swp
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
+.nyc_output/
+.next/
+.nuxt/
+.svelte-kit/
+.turbo/
+.parcel-cache/
+.vercel/
+storybook-static/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.tox/
+.coverage*
+dist/
+build/
+pip-wheel-metadata/
+
+# Misc archives
+*.zip
+*.tar
+*.gz
+
+# Tooling caches
+.cache/
+.ruff_cache/
+.eslintcache
