@@ -9,14 +9,12 @@ from nestify_core.classes.arg_manager import ArgManager
 
 def _run_stream(core: Core) -> int:
     print("Nestify run: streaming enabled. Type your message; Ctrl+C to exit.")
-    spinner = "|/-\\"
     try:
         while True:
             msg = input("> ").strip()
             if not msg:
                 continue
             print("[sending] ...")
-            i = 0
             printed = False
             events = core.llm.generate(msg, stream=True)
             try:
@@ -24,22 +22,14 @@ def _run_stream(core: Core) -> int:
                     if isinstance(ev, dict) and ev.get("type") == "token":
                         sys.stdout.write(ev.get("value", ""))
                         sys.stdout.flush()
-                        # write spinner to stderr so it doesn't overwrite tokens
-                        sys.stderr.write("\r" + spinner[i % len(spinner)])
-                        sys.stderr.flush()
-                        i += 1
                         printed = True
                     elif isinstance(ev, dict) and ev.get("type") == "final":
-                        # clear spinner
-                        sys.stderr.write("\r \r")
-                        sys.stderr.flush()
-                        # print final text if provided
                         result = ev.get("result", {}) if isinstance(ev.get("result"), dict) else {}
                         final_text = result.get("text", "")
-                        if final_text:
+                        # Only print the final text if no tokens were printed
+                        if final_text and not printed:
                             sys.stdout.write(final_text)
                             printed = True
-                        # end the line
                         sys.stdout.write("\n")
                         sys.stdout.flush()
             except TypeError:
@@ -97,6 +87,11 @@ def _shell_with_approval(cmd: str) -> int:
 def app_main(argv: list[str] | None = None) -> int:
     argv = argv or sys.argv[1:]
     args = ArgManager().parse(argv)
+    # Enable streaming diagnostics if requested
+    if isinstance(args, dict) and args.get("debug_stream"):
+        import os
+        os.environ["NESTIFY_STREAM_DEBUG"] = "1"
+        sys.stderr.write("[stream-debug] enabled\n")
     if isinstance(args, dict) and args.get("error"):
         env = build_error_envelope(
             code="INVALID_ARGUMENT",

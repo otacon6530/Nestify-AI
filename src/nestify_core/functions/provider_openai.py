@@ -1,6 +1,10 @@
 from __future__ import annotations
+import os
+import sys
 import requests
+import json
 from .llm_probe import ProbeResult
+from .logger_init import init_jsonl_logger, log_event
 
 
 def probe_openai(base_url: str | None, api_key: str | None, timeout_seconds: int) -> ProbeResult:
@@ -30,17 +34,33 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
     if stream:
         def gen():
             collected = []
+            debug = os.environ.get("NESTIFY_STREAM_DEBUG") == "1"
+            logger = init_jsonl_logger() if debug else None
+            if debug and logger:
+                log_event(logger, "INFO", "stream-debug content-type", content_type=r.headers.get('Content-Type', ''), provider="openai", model=model)
+            def _normalize_token(t: str) -> str:
+                try:
+                    if any(ord(c) >= 128 for c in t):
+                        b = t.encode("latin-1", errors="strict")
+                        return b.decode("utf-8", errors="ignore")
+                    return t
+                except Exception:
+                    return t
             for raw in r.iter_lines(decode_unicode=True):
                 if not raw:
                     continue
                 line = raw.strip()
+                if debug and logger:
+                    log_event(logger, "INFO", "stream-debug raw", raw=line, provider="openai", model=model)
                 if line.startswith("data:"):
                     line = line[5:].strip()
                 if line == "[DONE]":
                     break
                 try:
-                    evt = requests.utils.json.loads(line)
+                    evt = json.loads(line)
                 except Exception:
+                    if debug and logger:
+                        log_event(logger, "INFO", "stream-debug non-json line", raw=line, provider="openai", model=model)
                     continue
                 # Try common OpenAI-style delta paths
                 token = (
@@ -66,6 +86,7 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
                     if isinstance(ch0, dict):
                         token = ch0.get("text", "") or ch0.get("delta", {}).get("content", "")
                 if token:
+                    token = _normalize_token(token)
                     collected.append(token)
                     yield {"type": "token", "value": token}
             full_text = "".join(collected)
