@@ -20,6 +20,9 @@ def probe_openai(base_url: str | None, api_key: str | None, timeout_seconds: int
 def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str | None, **kwargs):
     stream = bool(kwargs.get("stream", False))
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"} if api_key else {"Content-Type": "application/json"}
+    if stream:
+        # Encourage SSE streaming from compatible servers
+        headers["Accept"] = "text/event-stream"
     url = (base_url or "").rstrip("/") + "/chat/completions"
     payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": stream}
     r = requests.post(url, json=payload, headers=headers, timeout=60, stream=stream)
@@ -44,7 +47,24 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
                     evt.get("choices", [{}])[0].get("delta", {}).get("content")
                     or evt.get("choices", [{}])[0].get("message", {}).get("content")
                     or evt.get("content", "")
+                    or evt.get("response", "")
                 )
+                # Some servers emit content as arrays of parts
+                if not token:
+                    parts = evt.get("content")
+                    if isinstance(parts, list):
+                        buf = []
+                        for p in parts:
+                            if isinstance(p, dict) and p.get("type") == "text":
+                                buf.append(p.get("text", ""))
+                            elif isinstance(p, str):
+                                buf.append(p)
+                        token = "".join(buf)
+                # Some servers use choices[].text
+                if not token:
+                    ch0 = evt.get("choices", [{}])[0]
+                    if isinstance(ch0, dict):
+                        token = ch0.get("text", "") or ch0.get("delta", {}).get("content", "")
                 if token:
                     collected.append(token)
                     yield {"type": "token", "value": token}
