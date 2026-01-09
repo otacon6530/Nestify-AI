@@ -57,6 +57,7 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
 - All functions that implement class behaviors are defined in `functions/`.
 - Each class in `classes/` imports the relevant functions and assigns them to the class instance in its `__init__`, making them available as methods.
 - This keeps function implementations reusable and decoupled, while `core.py` remains the sole orchestrator of inter-class communication.
+ - Function granularity: Every function must live in its own file under `functions/` (for both Core and CLI). Use clear, descriptive file names (snake_case) that match the function’s purpose.
 
 ### Class Specifications
 1. `Config`
@@ -87,10 +88,12 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - Responsibility: Import tools from `tools/`, register them, and provide invocation.
   - Scope: Tools in `tools/` are globally available; support tagging to mark app-specific tools (e.g., VS Code-only).
   - Metadata: Pass structured metadata/context into tool calls; integrate tools provided by `MCP`.
+  - Approvals: Sensitive tools (e.g., `shell`) are registered with `requires_approval=true`; execution is gated until explicit user approval.
 
 6. `SkillsManager`
   - Responsibility: Load and use OpenAI structured skills from `skills/`.
   - API: Register skills, validate schemas, expose skills to `LLM` or `Agent` workflows.
+  - Shell Skill: Expose a structured `shell` skill backed by `tools/shell.py`; marked sensitive and requires approval before any execution.
 
 7. `MCP`
   - Responsibility: Connect to an MCP server and consume its tools.
@@ -190,29 +193,27 @@ Note: For v0.0.1, prefer local file storage (YAML/JSON) for configs and run logs
   - `nestify exec "<text>"` performs a one-and-done execution (non-stream)
   - Mode selection via `--mode default|plan`; input gating and progress spinner semantics match the VS Code extension
 
+## Shell Skill & Approval Workflow
+- Location: All shell logic resides in `tools/shell.py`. The `shell` skill allows the AI to request execution of local shell commands and is marked sensitive.
+- Per-command approval: Each requested `shell` command requires explicit user approval before it executes.
+- Deny behavior: If denied, a structured denial result is returned so the LLM is aware of the denial and can replan.
+- Approve All: Users may select “Approve All” to allow all subsequent `shell` commands for the current session; approvals reset when the session resets or mode changes.
+- Session scope: A session is one continuous chat in the extension or a single CLI run; new sessions reset approvals.
+- CLI UX: The CLI prints the full command and prompts: Approve, Deny, Approve All. Input is gated until a decision. On Approve, output streams line-by-line in interactive runs; on Deny, a denial message is printed and returned.
+- VS Code UX: An inline approval banner shows the command with Approve/Deny/Approve All. The Send button remains disabled until a decision; a spinner shows during execution and is removed on final result.
+- Logging & safety: Logger records approval requests/decisions, sanitized command, exit code, duration, truncated outputs, and correlation_id. Commands have a default timeout (e.g., 30s) and may run in a restricted working directory. Secrets are redacted in all logs.
+- Windows specifics: Default shell is PowerShell (configurable fallback to cmd.exe). Quoting/escaping follows PowerShell rules; the tool respects current execution policies.
+
+## Documentation
+- Build Document: Provide a dedicated build document detailing how to build, install, and run the Core, CLI, and VS Code extension (Windows-focused; include PowerShell examples and `scripts/build.ps1` usage).
+- READMEs: Maintain component-specific READMEs with instructions and descriptions:
+  - Core README: installation, configuration (`config.yaml`), Logger behavior, error envelope
+  - CLI README: commands (`run`, `eval`, `config`, `exec`), streaming behavior, session modes, examples
+  - VS Code Extension README: installation steps, settings, Python bridge usage, chat UI and UX semantics
+  - Root README: overview, architecture, quick start, links to component docs
+
 ## Milestones & Timeline
 - Milestone 1 (Core & CLI): Scaffolding, basic `ModelClient`, `Executor`, `nestify run/config`, tests
 - Milestone 2 (VS Code): Command palette actions, output panel, settings integration
 - Milestone 3 (Quality): Eval tooling basics, pre-commit hooks, docs, packaging & version bump
 
-## Risks & Assumptions
-- Risks: Scope creep, auth complexity, data migration.
-- Assumptions: Single region, moderate traffic, standard compliance needs.
-
-Additional Risks (LLM-specific): Provider API changes, rate limits, prompt injection, dependency on API keys.
-
-## Success Metrics
-- Developer activation (runs per day), iteration speed, eval coverage, error rate, latency/cost per generation.
-
-## Open Questions
-- Which primary provider(s) to support first?
-- CLI vs extension communication path (direct Python bridge vs CLI invocation)?
-- Config format preference (YAML vs TOML vs JSON)?
-
-## Next Steps
-- Create Python core skeleton (`nestify_core`) with `ModelClient`, `Executor`, and config loader
-- Scaffold CLI (`nestify`) with `run` and `config` commands
-- Initialize VS Code extension structure and command palette entries
-- Set up tooling: ruff, black, mypy, pytest, pre-commit
-- Define `pyproject.toml`, basic dependency set, and version `0.0.1`
- - Add `scripts/build.ps1` to build the core package (when `pyproject.toml` is present) and run tests (pytest); document usage in README.
