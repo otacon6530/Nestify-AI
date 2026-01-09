@@ -51,6 +51,12 @@ Nestify is an LLM-powered application starting at version **0.0.1**. The system 
   - `tools/`: Built-in and app-specific tools (e.g., VS Code-specific tools)
   - `skills/`: OpenAI structured skills definitions
   - `agents/`: Agent definitions with system prompts
+  - `functions/`: All class function implementations live here and are imported into classes, then bound as methods during class initialization.
+
+### Method Binding Pattern
+- All functions that implement class behaviors are defined in `functions/`.
+- Each class in `classes/` imports the relevant functions and assigns them to the class instance in its `__init__`, making them available as methods.
+- This keeps function implementations reusable and decoupled, while `core.py` remains the sole orchestrator of inter-class communication.
 
 ### Class Specifications
 1. `Config`
