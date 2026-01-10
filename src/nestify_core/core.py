@@ -57,86 +57,11 @@ class Core:
     
     def generate(self, text: str, **kwargs):
         """
-        Generate a response from the LLM, optionally including memory context.
-        Args:
-            text: User query or prompt.
-            kwargs: Additional arguments for LLM (e.g., stream=True).
-        Returns:
-            LLM response (stream or dict).
+        Delegate generation to the Agent's implementation.
+        This keeps Core thin and the Agent responsible for orchestration.
         """
-        context_items = self.memory.search(text, top_k=3)
-        context_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
-        )
-        self.memory.add(text, metadata={"source": "user"})
-        self.logger.log("DEBUG", "Memory context retrieved", context_count=len(context_items))
-        tool_lines = [f"{tool['name']}: {tool['description']}" for tool in self.tool_manager.list_tools()]
-        tools_text = "\n".join(tool_lines)
-
-        # Add latest memory records for troubleshooting
-        latest_mem = self.memory.latest(5)
-        latest_mem_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in latest_mem
-        )
-
-        prompt = self.build_prompt_with_memory(text)
-        self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
-
-        stream = kwargs.get("stream", False)
-        return_value = None
-        if stream:
-            # Streaming: accumulate tokens and yield as they arrive, then store full response at end
-            response_text = ""
-            for event in self.llm.generate(prompt, **kwargs):
-                if isinstance(event, dict):
-                    if event.get("type") == "token":
-                        response_text += event.get("value", "")
-                        yield event
-                    elif event.get("type") == "final":
-                        # Prefer full text from final event if present
-                        return_value = event.get("result", {}).get("text", response_text)
-                        yield event
-        else:
-            # Non-streaming: store output immediately
-            result = self.llm.generate(prompt, **kwargs)
-            return_value = result.get("output") or result.get("text")
-        
-        # Wait for full response before adding to memory
-        if return_value:
-            self.logger.log("DEBUG", "LLM response received", response=return_value)
-            # Try to extract tool calls from the response
-            tool_call = self.tool_manager.extract_tool_call(return_value)
-            if tool_call:
-                self.logger.log("INFO", "Tool call extracted", tool_call=tool_call)
-                try:
-                    tool_name = tool_call.get("name")
-                    tool_args = tool_call.get("args", {})
-                    tool_result = self.tool_manager.invoke(tool_name, **tool_args)
-                    self.logger.log("INFO", "Tool executed", tool=tool_name, args=tool_args, result=tool_result)
-                    tool_result_str = f"[tool:{tool_name}] {json.dumps(tool_result)}"
-                    self.memory.add(tool_result_str, metadata={"source": "tool"})                   
-                    followup_prompt = self.build_prompt_with_memory(text)
-                    followup_result = self.llm.generate(followup_prompt, **kwargs)
-                    #followup_response = followup_result.get("output") or followup_result.get("text")
-                    
-                    if hasattr(followup_result, '__iter__') and not isinstance(followup_result, dict):
-                        # If it's a generator, exhaust it to get the final result
-                        for event in followup_result:
-                            if isinstance(event, dict) and event.get("type") == "final":
-                                followup_response = event.get("result", {}).get("text", "")
-                                break
-                        else:
-                            followup_response = ""
-                    else:
-                        followup_response = followup_result.get("output") or followup_result.get("text")
-
-                    self.logger.log("DEBUG", "LLM followup response", response=followup_response)
-                    self.memory.add(followup_response, metadata={"source": "assistant"})
-                    return followup_response
-                except Exception as e:
-                    self.logger.log("ERROR", "Tool execution failed", tool=tool_name, error=str(e))
-            self.memory.add(return_value, metadata={"source": "assistant"})
-        return return_value
+        # Simply forward to agent, passing dependencies explicitly
+        return self.agent.generate(text, llm=self.llm, memory=self.memory, tool_manager=self.tool_manager, logger=self.logger, **kwargs)
         
     def exec_once(self, text: str) -> int:
         """
