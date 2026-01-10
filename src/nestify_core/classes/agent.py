@@ -13,7 +13,7 @@ class Agent:
         self.system_prompt = "You are Nestify Agent"
 
     @staticmethod
-    def load_agent(agent_name, agents_dir="agents"):
+    def load_agent(agent_name, agents_dir=None):
         """
         Dynamically import and instantiate an agent subclass from the agents folder by name.
         Args:
@@ -24,6 +24,10 @@ class Agent:
         Raises:
             ImportError, AttributeError, FileNotFoundError
         """
+        # Default agents directory to src/nestify_core/agents next to this package
+        if agents_dir is None:
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+            agents_dir = os.path.join(base_dir, "agents")
         module_path = os.path.join(agents_dir, f"{agent_name}.py")
         if not os.path.exists(module_path):
             raise FileNotFoundError(f"Agent class file not found: {module_path}")
