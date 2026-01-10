@@ -1,5 +1,3 @@
 # Example agent configuration for 'default' agent
 # You can add more fields as needed (e.g., prompt_template, allowed_tools, etc.)
-agent_name: default
-prompt_template: |
-  You are a helpful AI assistant.
+
