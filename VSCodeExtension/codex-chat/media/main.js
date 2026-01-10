@@ -112,13 +112,25 @@
         }
         const mode = modeSelect ? modeSelect.value : 'default';
         appendEntry('user', text + (mode === 'plan' ? ' (Plan mode)' : ''));
-        // Add a temporary 'thinking' entry in the chat
-        const thinkingId = 'thinking-entry';
-        const thinkingDiv = document.createElement('div');
-        thinkingDiv.className = 'chat-entry assistant thinking';
-        thinkingDiv.id = thinkingId;
-        thinkingDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span><br><span id=\"stream-content\"></span>`;
-        chatLog.appendChild(thinkingDiv);
+            const thinkingElements = ensureThinkingElements();
+            const reasoningEl = thinkingElements.reasoningEl;
+            const contentEl = thinkingElements.contentEl;
+            if (reasoningEl) {
+                reasoningEl.innerHTML = '';
+                if (reasoningEl.dataset && 'raw' in reasoningEl.dataset) {
+                    delete reasoningEl.dataset.raw;
+                } else {
+                    reasoningEl.removeAttribute('data-raw');
+                }
+            }
+            if (contentEl) {
+                contentEl.innerHTML = '';
+                if (contentEl.dataset && 'raw' in contentEl.dataset) {
+                    delete contentEl.dataset.raw;
+                } else {
+                    contentEl.removeAttribute('data-raw');
+                }
+            }
         chatLog.scrollTop = chatLog.scrollHeight;
         showSpinner(true);
         setSendEnabled(false);
@@ -140,6 +152,48 @@
                 spinnerEl.innerHTML = '';
             }
         }
+    }
+
+    function ensureThinkingElements() {
+        let thinkingDiv = document.getElementById('thinking-entry');
+        let created = false;
+        if (!thinkingDiv) {
+            thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'chat-entry assistant thinking';
+            thinkingDiv.id = 'thinking-entry';
+            thinkingDiv.innerHTML = `<span class="chat-label">Assistant:</span> <span class="spinner-inline"></span> <span class="thinking-label">Thinking…</span>`;
+            thinkingDiv.appendChild(document.createElement('br'));
+            const reasoningSpan = document.createElement('span');
+            reasoningSpan.id = 'thinking-reasoning';
+            thinkingDiv.appendChild(reasoningSpan);
+            thinkingDiv.appendChild(document.createElement('br'));
+            const streamSpan = document.createElement('span');
+            streamSpan.id = 'stream-content';
+            thinkingDiv.appendChild(streamSpan);
+            chatLog.appendChild(thinkingDiv);
+            created = true;
+        }
+        let reasoningEl = thinkingDiv.querySelector('#thinking-reasoning');
+        if (!reasoningEl) {
+            reasoningEl = document.createElement('span');
+            reasoningEl.id = 'thinking-reasoning';
+            const streamEl = thinkingDiv.querySelector('#stream-content');
+            const br = document.createElement('br');
+            if (streamEl) {
+                streamEl.insertAdjacentElement('beforebegin', br);
+                streamEl.insertAdjacentElement('beforebegin', reasoningEl);
+            } else {
+                thinkingDiv.appendChild(br);
+                thinkingDiv.appendChild(reasoningEl);
+            }
+        }
+        let contentEl = thinkingDiv.querySelector('#stream-content');
+        if (!contentEl) {
+            contentEl = document.createElement('span');
+            contentEl.id = 'stream-content';
+            thinkingDiv.appendChild(contentEl);
+        }
+        return { thinkingDiv, reasoningEl, contentEl, created };
     }
 
     function escapeHtml(str) {
@@ -329,21 +383,34 @@
             return;
         }
         switch (message.type) {
-            case 'assistant_stream': {
-                const thinkingDiv = document.getElementById('thinking-entry');
-                let contentEl = thinkingDiv && thinkingDiv.querySelector('#stream-content');
-                if (!contentEl) {
-                    const newDiv = document.createElement('div');
-                    newDiv.className = 'chat-entry assistant thinking';
-                    newDiv.id = 'thinking-entry';
-                    newDiv.innerHTML = `<span class=\"chat-label\">Assistant:</span> <span class=\"spinner-inline\"></span> <span class=\"thinking-label\">Thinking…</span><br><span id=\"stream-content\"></span>`;
-                    chatLog.appendChild(newDiv);
-                    contentEl = newDiv.querySelector('#stream-content');
+            case 'assistant_thinking': {
+                const thinkingElements = ensureThinkingElements();
+                const reasoningEl = thinkingElements.reasoningEl;
+                if (reasoningEl && typeof message.message === 'string') {
+                    const chunk = message.message.replace(/\r/g, '');
+                    const raw = (reasoningEl.dataset && reasoningEl.dataset.raw) ? reasoningEl.dataset.raw + chunk : chunk;
+                    if (reasoningEl.dataset) {
+                        reasoningEl.dataset.raw = raw;
+                    } else {
+                        reasoningEl.setAttribute('data-raw', raw);
+                    }
+                    const html = escapeHtml(raw).replace(/\n/g, '<br>');
+                    reasoningEl.innerHTML = html;
+                    chatLog.scrollTop = chatLog.scrollHeight;
                 }
+                break;
+            }
+            case 'assistant_stream': {
+                const thinkingElements = ensureThinkingElements();
+                const contentEl = thinkingElements.contentEl;
                 if (contentEl && typeof message.message === 'string') {
                     const chunk = message.message.replace(/\r/g, '');
                     const raw = (contentEl.dataset && contentEl.dataset.raw) ? contentEl.dataset.raw + chunk : chunk;
-                    if (contentEl.dataset) contentEl.dataset.raw = raw; else contentEl.setAttribute('data-raw', raw);
+                    if (contentEl.dataset) {
+                        contentEl.dataset.raw = raw;
+                    } else {
+                        contentEl.setAttribute('data-raw', raw);
+                    }
                     const html = escapeHtml(raw).replace(/\n/g, '<br>');
                     contentEl.innerHTML = html;
                     chatLog.scrollTop = chatLog.scrollHeight;
@@ -359,7 +426,6 @@
                 break;
             }
             case 'assistant': {
-                // Non-stream assistant messages (fallback)
                 const thinkingDiv = document.getElementById('thinking-entry');
                 if (thinkingDiv) thinkingDiv.remove();
                 appendEntry('assistant', message.message || '');

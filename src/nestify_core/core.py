@@ -64,6 +64,7 @@ class Core:
         Returns:
             LLM response (stream or dict).
         """
+        return self.llm.generate(text, **kwargs)
         context_items = self.memory.search(text, top_k=3)
         context_text = "\n---\n".join(
             f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
@@ -98,6 +99,9 @@ class Core:
         self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
 
         stream = kwargs.get("stream", False)
+        return_value = None
+        
+        
         if stream:
             # Streaming: accumulate tokens and yield as they arrive, then store full response at end
             def stream_wrapper():
@@ -113,6 +117,7 @@ class Core:
                             yield event
                 # Store the assistant's full reply in memory after stream ends
                 if response_text:
+                    return_value = response_text
                     self.memory.add(response_text, metadata={"source": "assistant"})
             return stream_wrapper()
         else:

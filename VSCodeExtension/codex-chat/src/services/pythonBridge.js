@@ -99,7 +99,9 @@ class PythonBridge {
         try {
             const payload = JSON.parse(trimmed);
             // Translate Nestify bridge protocol into aggregated stream events
-            if (payload && payload.type === 'token') {
+            if (payload && payload.type === 'thinking') {
+                this.messageEmitter.fire({ type: 'assistant_thinking', content: payload.value || '' });
+            } else if (payload && payload.type === 'token') {
                 this.messageEmitter.fire({ type: 'assistant_stream', content: payload.value || '' });
             } else if (payload && payload.type === 'final') {
                 const text = (payload.result && payload.result.text) || '';

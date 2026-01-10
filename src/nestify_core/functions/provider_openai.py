@@ -62,9 +62,11 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
                     if debug and logger:
                         log_event(logger, "INFO", "stream-debug non-json line", raw=line, provider="openai", model=model)
                     continue
-                # Try common OpenAI-style delta paths
+                # Separate reasoning (for thinking) from user-facing content
+                delta = evt.get("choices", [{}])[0].get("delta", {})
+                reasoning = delta.get("reasoning")
                 token = (
-                    evt.get("choices", [{}])[0].get("delta", {}).get("content")
+                    delta.get("content")
                     or evt.get("choices", [{}])[0].get("message", {}).get("content")
                     or evt.get("content", "")
                     or evt.get("response", "")
@@ -84,7 +86,11 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
                 if not token:
                     ch0 = evt.get("choices", [{}])[0]
                     if isinstance(ch0, dict):
-                        token = ch0.get("text", "") or ch0.get("delta", {}).get("content", "")
+                        delta = ch0.get("delta", {}) if isinstance(ch0.get("delta"), dict) else {}
+                        token = ch0.get("text", "") or delta.get("content", "")
+                if reasoning:
+                    reasoning_norm = _normalize_token(reasoning)
+                    yield {"type": "thinking", "value": reasoning_norm}
                 if token:
                     token = _normalize_token(token)
                     collected.append(token)

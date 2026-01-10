@@ -31,7 +31,10 @@ def main():
                     try:
                         events = core.generate(text, stream=True)
                         for ev in events:
-                            if isinstance(ev, dict) and ev.get("type") == "token":
+                            if isinstance(ev, dict) and ev.get("type") == "thinking":
+                                sys.stdout.write(json.dumps({"type": "thinking", "value": ev.get("value", "")}) + "\n")
+                                sys.stdout.flush()
+                            elif isinstance(ev, dict) and ev.get("type") == "token":
                                 sys.stdout.write(json.dumps({"type": "token", "value": ev.get("value", "")}) + "\n")
                                 sys.stdout.flush()
                             elif isinstance(ev, dict) and ev.get("type") == "final":

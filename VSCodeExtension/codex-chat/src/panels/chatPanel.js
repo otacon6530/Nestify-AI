@@ -296,6 +296,9 @@ class ChatPanel {
             case 'assistant_stream':
                 this.postToWebview({ type: 'assistant_stream', message: message.content || '' });
                 break;
+            case 'assistant_thinking':
+                this.postToWebview({ type: 'assistant_thinking', message: message.content || '' });
+                break;
             case 'assistant_final':
                 this.postToWebview({ type: 'assistant_final', message: message.content || '' });
                 this.postToWebview({ type: 'spinner', show: false });
