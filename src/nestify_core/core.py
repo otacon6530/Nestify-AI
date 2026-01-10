@@ -67,7 +67,14 @@ class Core:
         context_items = self.memory.search(text, top_k=3)
         context_text = "\n---\n".join(item["text"] for item in context_items)
         self.memory.add(text, metadata={"source": "user"})
-        return self.llm.generate(f"{context_text}\n\nUser: {text}", **kwargs)
+        result = self.llm.generate(f"{context_text}\n\nUser: {text}", **kwargs)
+        if result is None:
+            # Always return an empty list for stream, or empty dict for non-stream
+            if kwargs.get("stream", False):
+                return []
+            else:
+                return {"output": ""}
+        return result
         
     def exec_once(self, text: str) -> int:
         """
