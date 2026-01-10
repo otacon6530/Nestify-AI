@@ -30,7 +30,25 @@ def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
 
 # Tool metadata for registration
 TOOL_NAME = "shell"
-TOOL_DESCRIPTION = "Run a shell command on the local system. Requires user approval unless previously approved for the session."
+TOOL_DESCRIPTION = (
+    "Run a Windows shell command on the local system. Requires approval unless previously approved.\n"
+    "\n"
+    "Tool call examples:\n"
+    "```tool\n"
+    "{\n"
+    "  \"name\": \"shell\",\n"
+    "  \"args\": {\"command\": \"dir\"}\n"
+    "}\n"
+    "```\n"
+    "\n"
+    "or with approval:\n"
+    "```tool\n"
+    "{\n"
+    "  \"name\": \"shell\",\n"
+    "  \"args\": {\"command\": \"echo hello\", \"approve\": \"yes\"}\n"
+    "}\n"
+    "```\n"
+)
 
 
 def _run(cmd: str) -> Dict[str, Any]:

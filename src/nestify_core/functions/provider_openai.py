@@ -6,7 +6,6 @@ import json
 from .llm_probe import ProbeResult
 from .logger_init import init_jsonl_logger, log_event
 
-
 def probe_openai(base_url: str | None, api_key: str | None, timeout_seconds: int) -> ProbeResult:
     if not base_url:
         return ProbeResult(False, "Missing base_url for OpenAI provider")

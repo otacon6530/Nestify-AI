@@ -47,20 +47,20 @@ class ToolManager:
             for name, info in self.tool_info.items()
         ]
 
-        def extract_tool_call(response_text):
-            # Look for a code block with ```tool
-            match = re.search(r"```tool\\s*(\\{.*?\\})\\s*```", response_text, re.DOTALL)
-            if match:
-                try:
-                    tool_call = json.loads(match.group(1))
-                    return tool_call
-                except Exception:
-                    return None
-            # Fallback: try to parse any JSON in the response
+    def extract_tool_call(self, response_text):
+        # Look for a code block with ```tool
+        match = re.search(r"```tool\s*({.*?})\s*```", response_text, re.DOTALL)
+        if match:
             try:
-                tool_call = json.loads(response_text)
-                if "tool_call" in tool_call or ("name" in tool_call and "args" in tool_call):
-                    return tool_call
+                tool_call = json.loads(match.group(1))
+                return tool_call
             except Exception:
-                pass
-            return None
+                return None
+        # Fallback: try to parse any JSON in the response
+        try:
+            tool_call = json.loads(response_text)
+            if "tool_call" in tool_call or ("name" in tool_call and "args" in tool_call):
+                return tool_call
+        except Exception:
+            pass
+        return None

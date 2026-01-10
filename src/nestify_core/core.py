@@ -16,7 +16,7 @@ Copyright (c) Nestify contributors. MIT License.
 
 from __future__ import annotations
 import sys
-import uuid
+import json
 from .classes.config import Config
 from .classes.logger import Logger
 from .classes.llm import LLM
@@ -64,7 +64,6 @@ class Core:
         Returns:
             LLM response (stream or dict).
         """
-        return self.llm.generate(text, **kwargs)
         context_items = self.memory.search(text, top_k=3)
         context_text = "\n---\n".join(
             f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
@@ -100,33 +99,46 @@ class Core:
 
         stream = kwargs.get("stream", False)
         return_value = None
-        
-        
         if stream:
             # Streaming: accumulate tokens and yield as they arrive, then store full response at end
-            def stream_wrapper():
-                response_text = ""
-                for event in self.llm.generate(prompt, **kwargs):
-                    if isinstance(event, dict):
-                        if event.get("type") == "token":
-                            response_text += event.get("value", "")
-                            yield event
-                        elif event.get("type") == "final":
-                            # Prefer full text from final event if present
-                            response_text = event.get("result", {}).get("text", response_text)
-                            yield event
-                # Store the assistant's full reply in memory after stream ends
-                if response_text:
-                    return_value = response_text
-                    self.memory.add(response_text, metadata={"source": "assistant"})
-            return stream_wrapper()
+            response_text = ""
+            for event in self.llm.generate(prompt, **kwargs):
+                if isinstance(event, dict):
+                    if event.get("type") == "token":
+                        response_text += event.get("value", "")
+                        yield event
+                    elif event.get("type") == "final":
+                        # Prefer full text from final event if present
+                        return_value = event.get("result", {}).get("text", response_text)
+                        yield event
         else:
             # Non-streaming: store output immediately
             result = self.llm.generate(prompt, **kwargs)
-            output = result.get("output") or result.get("text")
-            if output:
-                self.memory.add(output, metadata={"source": "assistant"})
-            return result
+            return_value = result.get("output") or result.get("text")
+        
+        # Wait for full response before adding to memory
+        if return_value:
+            self.logger.log("DEBUG", "LLM response received", response=return_value)
+            # Try to extract tool calls from the response
+            tool_call = self.tool_manager.extract_tool_call(return_value)
+            if tool_call:
+                self.logger.log("INFO", "Tool call extracted", tool_call=tool_call)
+                try:
+                    tool_name = tool_call.get("name")
+                    tool_args = tool_call.get("args", {})
+                    tool_result = self.tool_manager.invoke(tool_name, **tool_args)
+                    self.logger.log("INFO", "Tool executed", tool=tool_name, args=tool_args, result=tool_result)
+                    tool_result_str = f"[tool:{tool_name}] {json.dumps(tool_result)}"
+                    self.memory.add(tool_result_str, metadata={"source": "tool"})                   
+                    followup_result = self.llm.generate(self._build_prompt_with_memory(text), **kwargs)
+                    followup_response = followup_result.get("output") or followup_result.get("text")
+                    self.logger.log("DEBUG", "LLM followup response", response=followup_response)
+                    self.memory.add(followup_response, metadata={"source": "assistant"})
+                    return followup_response
+                except Exception as e:
+                    self.logger.log("ERROR", "Tool execution failed", tool=tool_name, error=str(e))
+            self.memory.add(return_value, metadata={"source": "assistant"})
+        return return_value
         
     def exec_once(self, text: str) -> int:
         """
