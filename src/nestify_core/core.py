@@ -79,22 +79,7 @@ class Core:
             f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in latest_mem
         )
 
-        prompt = ""
-        if context_text:
-            prompt = (
-                "You are continuing a conversation. Use the relevant notes below "
-                "to answer the latest user message.\n"  # brief instruction for clarity
-                f"Relevant notes:\n{context_text}\n\n"
-            )
-
-        if latest_mem_text:
-            prompt += f"[Troubleshooting] Latest memory records:\n{latest_mem_text}\n\n"
-
-        if tools_text:
-            prompt += f"Available tools:\n{tools_text}\n\n"
-
-        prompt += f"Latest user message: {text}"
-
+        prompt = self.build_prompt_with_memory(text)
         self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
 
         stream = kwargs.get("stream", False)
@@ -130,8 +115,21 @@ class Core:
                     self.logger.log("INFO", "Tool executed", tool=tool_name, args=tool_args, result=tool_result)
                     tool_result_str = f"[tool:{tool_name}] {json.dumps(tool_result)}"
                     self.memory.add(tool_result_str, metadata={"source": "tool"})                   
-                    followup_result = self.llm.generate(self._build_prompt_with_memory(text), **kwargs)
-                    followup_response = followup_result.get("output") or followup_result.get("text")
+                    followup_prompt = self.build_prompt_with_memory(text)
+                    followup_result = self.llm.generate(followup_prompt, **kwargs)
+                    #followup_response = followup_result.get("output") or followup_result.get("text")
+                    
+                    if hasattr(followup_result, '__iter__') and not isinstance(followup_result, dict):
+                        # If it's a generator, exhaust it to get the final result
+                        for event in followup_result:
+                            if isinstance(event, dict) and event.get("type") == "final":
+                                followup_response = event.get("result", {}).get("text", "")
+                                break
+                        else:
+                            followup_response = ""
+                    else:
+                        followup_response = followup_result.get("output") or followup_result.get("text")
+
                     self.logger.log("DEBUG", "LLM followup response", response=followup_response)
                     self.memory.add(followup_response, metadata={"source": "assistant"})
                     return followup_response
@@ -160,3 +158,31 @@ class Core:
                 exc=e,
             )
             return emit_error(env)
+        
+    def build_prompt_with_memory(self, text: str) -> str:
+        """
+        Build the LLM prompt using current memory, tools, and the latest user message.
+        """
+        context_items = self.memory.search(text, top_k=3)
+        context_text = "\n---\n".join(
+            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
+        )
+        tool_lines = [f"{tool['name']}: {tool['description']}" for tool in self.tool_manager.list_tools()]
+        tools_text = "\n".join(tool_lines)
+        latest_mem = self.memory.latest(5)
+        latest_mem_text = "\n---\n".join(
+            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in latest_mem
+        )
+        prompt = ""
+        if context_text:
+            prompt = (
+                "You are continuing a conversation. Use the relevant notes below "
+                "to answer the latest user message.\n"
+                f"Relevant notes:\n{context_text}\n\n"
+            )
+        if latest_mem_text:
+            prompt += f"[Troubleshooting] Latest memory records:\n{latest_mem_text}\n\n"
+        if tools_text:
+            prompt += f"Available tools:\n{tools_text}\n\n"
+        prompt += f"Latest user message: {text}"
+        return prompt
