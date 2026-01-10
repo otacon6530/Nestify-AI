@@ -3,16 +3,15 @@ import json
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timezone
 from pathlib import Path
-from .logger_path import get_log_dir
 
 
 def init_jsonl_logger(name: str = "nestify", max_bytes: int = 10 * 1024 * 1024, backup_count: int = 5) -> logging.Logger:
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    # Avoid duplicate handlers
-    if logger.handlers:
-        return logger
-    log_path: Path = get_log_dir() / "log.jsonl"
+    logger.setLevel(logging.DEBUG)
+    # Remove all handlers to avoid duplicate or blocking handlers
+    for h in list(logger.handlers):
+        logger.removeHandler(h)
+    log_path: Path = Path.cwd() / "log.txt"
     handler = RotatingFileHandler(log_path, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
 
     class JsonlFormatter(logging.Formatter):

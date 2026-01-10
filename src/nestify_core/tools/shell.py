@@ -4,7 +4,16 @@ from typing import Optional, Dict, Any
 _APPROVE_ALL = False
 
 
+
 def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Run a shell command on the local system. Requires user approval unless previously approved for the session.
+    Args:
+        command: The shell command to execute.
+        approve: Approval flag (None, 'yes', 'no', or 'all').
+    Returns:
+        Dict with status, command, and output or approval request.
+    """
     global _APPROVE_ALL
     cmd = command.strip()
     if _APPROVE_ALL or approve == "all":
@@ -17,6 +26,11 @@ def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
         return {"status": "denied", "message": "Command denied by user", "command": cmd}
 
     return {"status": "needs_approval", "command": cmd}
+
+
+# Tool metadata for registration
+TOOL_NAME = "shell"
+TOOL_DESCRIPTION = "Run a shell command on the local system. Requires user approval unless previously approved for the session."
 
 
 def _run(cmd: str) -> Dict[str, Any]:

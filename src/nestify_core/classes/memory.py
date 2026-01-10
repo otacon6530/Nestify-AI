@@ -2,6 +2,7 @@ from datetime import datetime
 import math
 
 class Memory:
+
     """
     Memory class for storing and retrieving text/code snippets with optional semantic search.
 
@@ -18,6 +19,16 @@ class Memory:
         self._items = []  # Each item: dict with text, embedding, metadata, timestamp
         self._embed_fn = embed_fn
 
+    def latest(self, count=5):
+        """
+        Return the latest `count` memory records, most recent last.
+        Args:
+            count: Number of records to return (default 5).
+        Returns:
+            List of memory items (dicts), ordered oldest to newest.
+        """
+        return self._items[-count:] if count > 0 else []
+    
     def add(self, text, metadata=None):
         """
         Add a new memory entry.
@@ -31,7 +42,9 @@ class Memory:
             "timestamp": datetime.utcnow()
         }
         if self._embed_fn:
-            item["embedding"] = self._embed_fn(text)
+            embedding = self._embed_fn(text)
+            if embedding is not None:
+                item["embedding"] = embedding
         self._items.append(item)
 
     def search(self, query, top_k=5):
@@ -45,19 +58,34 @@ class Memory:
         """
         if self._embed_fn:
             query_vec = self._embed_fn(query)
-            def cosine(a, b):
-                """Compute cosine similarity between two vectors."""
-                dot = sum(x*y for x, y in zip(a, b))
-                norm_a = math.sqrt(sum(x*x for x in a))
-                norm_b = math.sqrt(sum(y*y for y in b))
-                return dot / (norm_a * norm_b + 1e-8)
-            scored = [
-                (item, cosine(query_vec, item["embedding"]))
-                for item in self._items if "embedding" in item
-            ]
-            scored.sort(key=lambda x: x[1], reverse=True)
-            return [item for item, _ in scored[:top_k]]
-        else:
-            # Fallback: keyword search
-            results = [item for item in self._items if query.lower() in item["text"].lower()]
-            return results[:top_k]
+            if query_vec is None:
+                query_vec = None
+            else:
+                def cosine(a, b):
+                    """Compute cosine similarity between two vectors."""
+                    dot = sum(x*y for x, y in zip(a, b))
+                    norm_a = math.sqrt(sum(x*x for x in a))
+                    norm_b = math.sqrt(sum(y*y for y in b))
+                    return dot / (norm_a * norm_b + 1e-8)
+                scored = [
+                    (item, cosine(query_vec, item["embedding"]))
+                    for item in self._items if "embedding" in item
+                ]
+                scored.sort(key=lambda x: x[1], reverse=True)
+                return [item for item, _ in scored[:top_k]]
+        # Fallback: keyword search with simple token overlap scoring
+        query_terms = {token for token in query.lower().split() if len(token) > 2}
+        scored_results = []
+        for item in self._items:
+            text_lower = item["text"].lower()
+            if query_terms:
+                item_terms = {token for token in text_lower.split() if len(token) > 2}
+                overlap = len(query_terms & item_terms)
+                if overlap > 0:
+                    scored_results.append((item, overlap))
+                elif query.lower() in text_lower:
+                    scored_results.append((item, 1))
+            elif query.lower() in text_lower:
+                scored_results.append((item, 1))
+        scored_results.sort(key=lambda pair: pair[1], reverse=True)
+        return [item for item, _ in scored_results[:top_k]]
