@@ -9,11 +9,12 @@ class Agent:
     Agent class for orchestrating LLM reasoning, tool use, and memory.
     Supports loading agent subclasses from the agents folder by name.
     """
-    def __init__(self, memory, tool_manager, llm):
+    def __init__(self, memory, tool_manager, llm, logger):
         self.system_prompt = "You are Nestify Agent"
         self.memory = memory
         self.tool_manager = tool_manager
         self.llm = llm
+        self.logger = logger
 
     @staticmethod
     def load_agent(agent_name, agents_dir=None):
@@ -91,16 +92,31 @@ class Agent:
             result = self.llm.generate(prompt, **kwargs)
             return_value = result.get("output") or result.get("text")
         return return_value
-    def generate(self, text: str, tool_manager, logger, **kwargs):
+    def generate(self, text: str, actions=None, max_steps=8, summarize=True, **kwargs):
         """
-        Generate a response from the LLM, optionally including memory context.
-        All dependencies are passed in as arguments to keep Agent stateless.
-        Supports streaming or non-streaming outputs.
+        Multi-step LLM/tool chaining: recursively handle tool calls, accumulate actions, and summarize at the end.
+        Args:
+            text: User message
+            actions: List to accumulate (tool calls, LLM responses)
+            max_steps: Max recursion depth
+            summarize: If True, summarize all actions at the end
+            kwargs: stream, etc.
+        Returns:
+            Final summary (or generator if streaming)
         """
+        if actions is None:
+            actions = []
+        if max_steps <= 0:
+            # Prevent infinite loops
+            actions.append({"type": "error", "message": "Max steps exceeded."})
+            summarize_kwargs = dict(kwargs)
+            stream_val = summarize_kwargs.pop('stream', False)
+            return self._summarize_actions(text, actions, stream=stream_val, **summarize_kwargs)
+
         context_text = self.getMemory(text)
         self.memory.add(text, metadata={"source": "user"})
         context_text += self.getTools(text)
-        
+
         prompt = (
             "You are continuing a conversation. Use the relevant notes below "
             "to answer the latest user message.\n\n"
@@ -108,33 +124,79 @@ class Agent:
             f"Latest user message: {text}"
         )
 
-        logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
+        self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
 
         stream = kwargs.get("stream", False)
         response = None
         if stream:
-            # Streaming: accumulate tokens and yield as they arrive, then store full response at end
+            # Streaming: accumulate tokens, yield as they arrive, then process final
             response_text = ""
-            for event in self.llm.generate(prompt, **kwargs):
+            for event in self.getResponse(prompt, **kwargs):
                 if isinstance(event, dict):
                     if event.get("type") == "token":
                         response_text += event.get("value", "")
                         yield event
                     elif event.get("type") == "final":
-                        # Prefer full text from final event if present
                         response = event.get("result", {}).get("text", response_text)
                         yield event
+            # After streaming, process tool call logic
         else:
-            # Non-streaming: store output immediately
-            result = self.llm.generate(prompt, **kwargs)
-            response = result.get("output") or result.get("text")
-        
+            response = self.getResponse(prompt, **kwargs)
+
         if response:
-            logger.log("DEBUG", "LLM response received", response=response)
-            # Try to extract tool calls from the response
-            tool_call = tool_manager.extract_tool_call(response)
-            if tool_call == "" :
+            self.logger.log("DEBUG", "LLM response received", response=response)
+            tool_call = self.tool_manager.extract_tool_call(response)
+            if tool_call == "":
                 self.memory.add(response, metadata={"source": "assistant"})
+                actions.append({"type": "llm", "text": response})
+                # No more tool calls: summarize if requested
+                if summarize:
+                    summarize_kwargs = dict(kwargs)
+                    stream_val = summarize_kwargs.pop('stream', stream)
+                    if stream_val:
+                        yield from self._summarize_actions(text, actions, stream=True, **summarize_kwargs)
+                        return
+                    else:
+                        return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
+                else:
+                    return response
             else:
                 self.memory.add(tool_call, metadata={"source": "tool"})
-        return response
+                actions.append({"type": "tool", "call": tool_call})
+                # Recursively handle next step
+                next_kwargs = dict(kwargs)
+                next_stream = next_kwargs.pop('stream', stream)
+                if next_stream:
+                    yield from self.generate(text, actions=actions, max_steps=max_steps-1, summarize=summarize, stream=True, **next_kwargs)
+                    return
+                else:
+                    return self.generate(text, actions=actions, max_steps=max_steps-1, summarize=summarize, stream=False, **next_kwargs)
+        # Defensive fallback
+        if summarize:
+            summarize_kwargs = dict(kwargs)
+            stream_val = summarize_kwargs.pop('stream', stream)
+            if stream_val:
+                yield from self._summarize_actions(text, actions, stream=True, **summarize_kwargs)
+            else:
+                return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
+        else:
+            return response
+
+    def _summarize_actions(self, text, actions, stream=False, **kwargs):
+        """
+        Use the LLM to summarize the actions taken for the user request.
+        """
+        summary_prompt = (
+            "Summarize the following actions taken to fulfill the user request. "
+            "List all tool calls and LLM responses in order, and provide a concise summary at the end.\n\n"
+            f"User request: {text}\n\n"
+            f"Actions taken:\n"
+            + "\n".join(
+                f"- TOOL: {a['call']}" if a.get("type") == "tool" else f"- LLM: {a.get('text','')}" for a in actions
+            )
+        )
+        self.logger.log("DEBUG", "Summarizing actions", prompt=summary_prompt)
+        if stream:
+            yield from self.getResponse(summary_prompt, stream=True, **kwargs)
+        else:
+            return self.getResponse(summary_prompt, stream=False, **kwargs)

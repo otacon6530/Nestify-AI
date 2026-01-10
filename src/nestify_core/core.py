@@ -47,7 +47,7 @@ class Core:
         self.tool_manager = ToolManager()
         self.skills_manager = SkillsManager(self.tool_manager)
         self.mcp = MCP()
-        self.agent = Agent(self.memory, self.tool_manager, self.llm)
+        self.agent = Agent(self.memory, self.tool_manager, self.llm, self.logger)
 
     def startup(self) -> int | None:
         """

@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import json
 
 class Memory:
 
@@ -76,6 +77,12 @@ class Memory:
             text: The text or code snippet to store.
             metadata: Optional dict of metadata (e.g., source, tags).
         """
+        # Coerce non-string inputs to a safe string representation
+        if not isinstance(text, str):
+            try:
+                text = json.dumps(text, ensure_ascii=False)
+            except Exception:
+                text = str(text)
         item = {
             "text": text,
             "metadata": metadata or {},
@@ -96,6 +103,12 @@ class Memory:
         Returns:
             List of matching memory items (dicts).
         """
+        # Coerce non-string query to string to avoid attribute errors
+        if not isinstance(query, str):
+            try:
+                query = json.dumps(query, ensure_ascii=False)
+            except Exception:
+                query = str(query)
         if self._embed_fn:
             query_vec = self._embed_fn(query)
             if query_vec is None:
@@ -114,18 +127,20 @@ class Memory:
                 scored.sort(key=lambda x: x[1], reverse=True)
                 return [item for item, _ in scored[:top_k]]
         # Fallback: keyword search with simple token overlap scoring
-        query_terms = {token for token in query.lower().split() if len(token) > 2}
+        query_lower = query.lower() if isinstance(query, str) else str(query).lower()
+        query_terms = {token for token in query_lower.split() if len(token) > 2}
         scored_results = []
         for item in self._items:
-            text_lower = item["text"].lower()
+            text_val = item.get("text", "")
+            text_lower = text_val.lower() if isinstance(text_val, str) else str(text_val).lower()
             if query_terms:
                 item_terms = {token for token in text_lower.split() if len(token) > 2}
                 overlap = len(query_terms & item_terms)
                 if overlap > 0:
                     scored_results.append((item, overlap))
-                elif query.lower() in text_lower:
+                elif query_lower in text_lower:
                     scored_results.append((item, 1))
-            elif query.lower() in text_lower:
+            elif query_lower in text_lower:
                 scored_results.append((item, 1))
         scored_results.sort(key=lambda pair: pair[1], reverse=True)
         return [item for item, _ in scored_results[:top_k]]
