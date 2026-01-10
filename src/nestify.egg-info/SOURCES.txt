@@ -13,6 +13,7 @@ src/nestify_cli/__init__.py
 src/nestify_cli/main.py
 src/nestify_core/__init__.py
 src/nestify_core/core.py
+src/nestify_core/agents/default.py
 src/nestify_core/classes/__init__.py
 src/nestify_core/classes/agent.py
 src/nestify_core/classes/agent_base.py

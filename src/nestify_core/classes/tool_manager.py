@@ -53,14 +53,20 @@ class ToolManager:
         if match:
             try:
                 tool_call = json.loads(match.group(1))
-                return tool_call
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                tool_result = self.invoke(tool_name, **tool_args)
+                return tool_result
             except Exception:
-                return None
+                return ""
         # Fallback: try to parse any JSON in the response
         try:
             tool_call = json.loads(response_text)
             if "tool_call" in tool_call or ("name" in tool_call and "args" in tool_call):
-                return tool_call
+                tool_name = tool_call.get("name")
+                tool_args = tool_call.get("args", {})
+                tool_result = self.invoke(tool_name, **tool_args)
+                return tool_result
         except Exception:
             pass
-        return None
+        return ""

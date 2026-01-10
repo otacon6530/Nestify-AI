@@ -47,7 +47,7 @@ class Core:
         self.tool_manager = ToolManager()
         self.skills_manager = SkillsManager(self.tool_manager)
         self.mcp = MCP()
-        self.agent = Agent()
+        self.agent = Agent(self.memory, self.tool_manager, self.llm)
 
     def startup(self) -> int | None:
         """
@@ -61,7 +61,7 @@ class Core:
         This keeps Core thin and the Agent responsible for orchestration.
         """
         # Simply forward to agent, passing dependencies explicitly
-        return self.agent.generate(text, llm=self.llm, memory=self.memory, tool_manager=self.tool_manager, logger=self.logger, **kwargs)
+        return self.agent.generate(text, llm=self.llm, tool_manager=self.tool_manager, logger=self.logger, **kwargs)
         
     def exec_once(self, text: str) -> int:
         """
@@ -83,31 +83,3 @@ class Core:
                 exc=e,
             )
             return emit_error(env)
-        
-    def build_prompt_with_memory(self, text: str) -> str:
-        """
-        Build the LLM prompt using current memory, tools, and the latest user message.
-        """
-        context_items = self.memory.search(text, top_k=3)
-        context_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
-        )
-        tool_lines = [f"{tool['name']}: {tool['description']}" for tool in self.tool_manager.list_tools()]
-        tools_text = "\n".join(tool_lines)
-        latest_mem = self.memory.latest(5)
-        latest_mem_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in latest_mem
-        )
-        prompt = ""
-        if context_text:
-            prompt = (
-                "You are continuing a conversation. Use the relevant notes below "
-                "to answer the latest user message.\n"
-                f"Relevant notes:\n{context_text}\n\n"
-            )
-        if latest_mem_text:
-            prompt += f"[Troubleshooting] Latest memory records:\n{latest_mem_text}\n\n"
-        if tools_text:
-            prompt += f"Available tools:\n{tools_text}\n\n"
-        prompt += f"Latest user message: {text}"
-        return prompt
