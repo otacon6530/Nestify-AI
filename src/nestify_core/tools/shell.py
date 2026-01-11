@@ -1,9 +1,6 @@
 import subprocess
 from typing import Optional, Dict, Any
 
-_APPROVE_ALL = False
-
-
 
 def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
     """
@@ -14,13 +11,8 @@ def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         Dict with status, command, and output or approval request.
     """
-    global _APPROVE_ALL
     cmd = command.strip()
-    if _APPROVE_ALL or approve == "all":
-        _APPROVE_ALL = True
-        return _run(cmd)
-
-    if approve == "yes":
+    if approve == "all" or approve == "yes":
         return _run(cmd)
     if approve == "no":
         return {"status": "denied", "message": "Command denied by user", "command": cmd}
@@ -30,6 +22,7 @@ def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
 
 # Tool metadata for registration
 TOOL_NAME = "shell"
+TOOL_REQUIRES_APPROVAL = True
 TOOL_DESCRIPTION = (
     "Run a Windows shell command on the local system. Requires approval unless previously approved.\n"
     "\n"

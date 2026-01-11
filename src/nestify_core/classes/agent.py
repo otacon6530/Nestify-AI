@@ -15,6 +15,8 @@ class Agent:
         self.tool_manager = tool_manager
         self.llm = llm
         self.logger = logger
+        # Track per-tool session approvals (e.g., approve-all choices)
+        self.session_tool_approvals = {}
 
     @staticmethod
     def load_agent(agent_name, agents_dir=None):
@@ -93,25 +95,21 @@ class Agent:
             return_value = result.get("output") or result.get("text")
         return return_value
     def generate(self, text: str, actions=None, max_steps=8, summarize=True, **kwargs):
-        """
-        Multi-step LLM/tool chaining: recursively handle tool calls, accumulate actions, and summarize at the end.
-        Args:
-            text: User message
-            actions: List to accumulate (tool calls, LLM responses)
-            max_steps: Max recursion depth
-            summarize: If True, summarize all actions at the end
-            kwargs: stream, etc.
-        Returns:
-            Final summary (or generator if streaming)
-        """
+        """Run multi-step reasoning with optional tool approvals and final summary."""
         if actions is None:
             actions = []
+
+        stream = kwargs.pop("stream", False)
+        approval_callback = kwargs.pop("approval_callback", None)
+
         if max_steps <= 0:
-            # Prevent infinite loops
             actions.append({"type": "error", "message": "Max steps exceeded."})
             summarize_kwargs = dict(kwargs)
-            stream_val = summarize_kwargs.pop('stream', False)
-            return self._summarize_actions(text, actions, stream=stream_val, **summarize_kwargs)
+            stream_val = summarize_kwargs.pop("stream", stream)
+            if stream_val:
+                yield from self._summarize_actions(text, actions, stream=True, **summarize_kwargs)
+                return
+            return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
 
         context_text = self.getMemory(text)
         self.memory.add(text, metadata={"source": "user"})
@@ -126,12 +124,10 @@ class Agent:
 
         self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
 
-        stream = kwargs.get("stream", False)
         response = None
         if stream:
-            # Streaming: accumulate tokens, yield as they arrive, then process final
             response_text = ""
-            for event in self.getResponse(prompt, **kwargs):
+            for event in self.getResponse(prompt, stream=True, **kwargs):
                 if isinstance(event, dict):
                     if event.get("type") == "token":
                         response_text += event.get("value", "")
@@ -139,61 +135,178 @@ class Agent:
                     elif event.get("type") == "final":
                         response = event.get("result", {}).get("text", response_text)
                         yield event
-            # After streaming, process tool call logic
         else:
             response = self.getResponse(prompt, **kwargs)
 
         if response:
             self.logger.log("DEBUG", "LLM response received", response=response)
-            tool_call = self.tool_manager.extract_tool_call(response)
-            if tool_call == "":
+            tool_invocation = self.tool_manager.extract_tool_call(response)
+            if not tool_invocation:
                 self.memory.add(response, metadata={"source": "assistant"})
                 actions.append({"type": "llm", "text": response})
-                # No more tool calls: summarize if requested
+                summarize_kwargs = dict(kwargs)
+                stream_val = summarize_kwargs.pop("stream", stream)
                 if summarize:
-                    summarize_kwargs = dict(kwargs)
-                    stream_val = summarize_kwargs.pop('stream', stream)
                     if stream_val:
                         yield from self._summarize_actions(text, actions, stream=True, **summarize_kwargs)
                         return
+                    return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
+                return response
+
+            tool_name = tool_invocation.get("name")
+            tool_args = dict(tool_invocation.get("args", {}))
+
+            auto_approve = bool(self.session_tool_approvals.get(tool_name))
+            result_record = None
+            denial_record = None
+            error_record = None
+            current_args = dict(tool_args)
+
+            try:
+                if auto_approve:
+                    approved_args = dict(tool_args)
+                    approved_args["approve"] = "all"
+                    current_args = approved_args
+                    result_record = self.tool_manager.invoke(tool_name, **approved_args)
+                elif self.tool_manager.needs_approval(tool_name):
+                    sanitized_args = dict(tool_args)
+                    sanitized_args.pop("approve", None)
+                    current_args = sanitized_args
+                    preliminary = self.tool_manager.invoke(tool_name, **sanitized_args)
+
+                    if isinstance(preliminary, dict) and preliminary.get("status") == "needs_approval":
+                        approval = {"approved": False, "approve_all": False}
+                        if callable(approval_callback):
+                            callback_response = approval_callback(
+                                tool_name=tool_name,
+                                tool_args=sanitized_args,
+                                pending=preliminary,
+                            )
+                            if callback_response is not None:
+                                approval = callback_response
+
+                        if not approval.get("approved"):
+                            self.session_tool_approvals.pop(tool_name, None)
+                            denial_record = {
+                                "status": "denied",
+                                "tool": tool_name,
+                                "command": preliminary.get("command") or sanitized_args.get("command"),
+                                "message": "User denied execution",
+                            }
+                        else:
+                            if approval.get("approve_all"):
+                                self.session_tool_approvals[tool_name] = True
+                            approved_args = dict(sanitized_args)
+                            approved_args["approve"] = "all" if approval.get("approve_all") else "yes"
+                            current_args = approved_args
+                            result_record = self.tool_manager.invoke(tool_name, **approved_args)
                     else:
-                        return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
+                        result_record = preliminary
                 else:
-                    return response
-            else:
-                self.memory.add(tool_call, metadata={"source": "tool"})
-                actions.append({"type": "tool", "call": tool_call})
-                # Recursively handle next step
+                    current_args = tool_args
+                    result_record = self.tool_manager.invoke(tool_name, **tool_args)
+            except Exception as exc:
+                error_record = {
+                    "status": "error",
+                    "tool": tool_name,
+                    "details": str(exc),
+                    "args": current_args,
+                }
+
+            if denial_record is not None:
+                actions.append({"type": "tool_denied", "tool": tool_name, "call": denial_record})
+                self.memory.add(denial_record, metadata={"source": "tool"})
                 next_kwargs = dict(kwargs)
-                next_stream = next_kwargs.pop('stream', stream)
-                if next_stream:
-                    yield from self.generate(text, actions=actions, max_steps=max_steps-1, summarize=summarize, stream=True, **next_kwargs)
+                next_kwargs["stream"] = stream
+                if approval_callback:
+                    next_kwargs["approval_callback"] = approval_callback
+                if stream:
+                    yield from self.generate(
+                        text,
+                        actions=actions,
+                        max_steps=max_steps - 1,
+                        summarize=summarize,
+                        **next_kwargs,
+                    )
                     return
-                else:
-                    return self.generate(text, actions=actions, max_steps=max_steps-1, summarize=summarize, stream=False, **next_kwargs)
-        # Defensive fallback
+                return self.generate(
+                    text,
+                    actions=actions,
+                    max_steps=max_steps - 1,
+                    summarize=summarize,
+                    **next_kwargs,
+                )
+
+            if error_record is not None:
+                actions.append({"type": "tool_error", "tool": tool_name, "call": error_record})
+                self.memory.add(error_record, metadata={"source": "tool"})
+            else:
+                actions.append({"type": "tool", "tool": tool_name, "call": result_record})
+                if result_record is not None:
+                    self.memory.add(result_record, metadata={"source": "tool"})
+
+            next_kwargs = dict(kwargs)
+            next_kwargs["stream"] = stream
+            if approval_callback:
+                next_kwargs["approval_callback"] = approval_callback
+            if stream:
+                yield from self.generate(
+                    text,
+                    actions=actions,
+                    max_steps=max_steps - 1,
+                    summarize=summarize,
+                    **next_kwargs,
+                )
+                return
+            return self.generate(
+                text,
+                actions=actions,
+                max_steps=max_steps - 1,
+                summarize=summarize,
+                **next_kwargs,
+            )
+
+        summarize_kwargs = dict(kwargs)
+        stream_val = summarize_kwargs.pop("stream", stream)
         if summarize:
-            summarize_kwargs = dict(kwargs)
-            stream_val = summarize_kwargs.pop('stream', stream)
             if stream_val:
                 yield from self._summarize_actions(text, actions, stream=True, **summarize_kwargs)
-            else:
-                return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
-        else:
-            return response
+                return
+            return self._summarize_actions(text, actions, stream=False, **summarize_kwargs)
+        return response
 
     def _summarize_actions(self, text, actions, stream=False, **kwargs):
         """
         Use the LLM to summarize the actions taken for the user request.
         """
+        action_lines = []
+        for action in actions:
+            a_type = action.get("type")
+            if a_type == "tool":
+                descriptor = action.get("tool", "tool")
+                call_repr = json.dumps(action.get("call"), ensure_ascii=False)
+                action_lines.append(f"- TOOL {descriptor}: {call_repr}")
+            elif a_type == "tool_denied":
+                descriptor = action.get("tool", "tool")
+                call_repr = json.dumps(action.get("call"), ensure_ascii=False)
+                action_lines.append(f"- TOOL_DENIED {descriptor}: {call_repr}")
+            elif a_type == "tool_error":
+                descriptor = action.get("tool", "tool")
+                call_repr = json.dumps(action.get("call"), ensure_ascii=False)
+                action_lines.append(f"- TOOL_ERROR {descriptor}: {call_repr}")
+            elif a_type == "llm":
+                action_lines.append(f"- LLM: {action.get('text', '')}")
+            elif a_type == "error":
+                action_lines.append(f"- ERROR: {json.dumps(action, ensure_ascii=False)}")
+            else:
+                action_lines.append(f"- OTHER: {json.dumps(action, ensure_ascii=False)}")
+
         summary_prompt = (
             "Summarize the following actions taken to fulfill the user request. "
             "List all tool calls and LLM responses in order, and provide a concise summary at the end.\n\n"
             f"User request: {text}\n\n"
-            f"Actions taken:\n"
-            + "\n".join(
-                f"- TOOL: {a['call']}" if a.get("type") == "tool" else f"- LLM: {a.get('text','')}" for a in actions
-            )
+            "Actions taken:\n"
+            + "\n".join(action_lines)
         )
         self.logger.log("DEBUG", "Summarizing actions", prompt=summary_prompt)
         if stream:

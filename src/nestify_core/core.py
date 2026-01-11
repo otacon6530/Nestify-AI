@@ -60,8 +60,7 @@ class Core:
         Delegate generation to the Agent's implementation.
         This keeps Core thin and the Agent responsible for orchestration.
         """
-        # Simply forward to agent, passing dependencies explicitly
-        return self.agent.generate(text, llm=self.llm, tool_manager=self.tool_manager, logger=self.logger, **kwargs)
+        return self.agent.generate(text, **kwargs)
         
     def exec_once(self, text: str) -> int:
         """
