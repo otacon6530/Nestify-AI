@@ -24,7 +24,7 @@ def shell_tool(command: str, approve: Optional[str] = None) -> Dict[str, Any]:
 TOOL_NAME = "shell"
 TOOL_REQUIRES_APPROVAL = True
 TOOL_DESCRIPTION = (
-    "Run a Windows shell command on the local system. Requires approval unless previously approved.\n"
+    "Run a Windows shell command on the local system.\n"
     "\n"
     "Tool call examples:\n"
     "```tool\n"

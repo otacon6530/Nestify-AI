@@ -16,7 +16,6 @@ Copyright (c) Nestify contributors. MIT License.
 
 from __future__ import annotations
 import sys
-import json
 from .classes.config import Config
 from .classes.logger import Logger
 from .classes.llm import LLM
