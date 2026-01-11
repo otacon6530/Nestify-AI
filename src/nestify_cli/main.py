@@ -106,9 +106,6 @@ def app_main(argv: list[str] | None = None) -> int:
             sys.stderr.write(usage)
         return args.get("exit_code", rc)
     core = Core()
-    startup_status = core.startup()
-    if startup_status is not None:
-        return startup_status
 
     cmd = args.get("command")
     if cmd == "exec":

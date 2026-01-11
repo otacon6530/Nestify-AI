@@ -59,10 +59,6 @@ def _wait_for_shell_approval(command, reason=None):
 def main():
     try:
         core = Core()
-        startup_status = core.startup()
-        if startup_status is not None:
-            _write({"type": "error", "exit_code": startup_status})
-            sys.exit(startup_status)
         # Signal ready to the caller
         _write({"type": "ready"})
 

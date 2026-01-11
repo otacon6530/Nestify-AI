@@ -34,4 +34,8 @@ src/nestify_core/functions/logger_init.py
 src/nestify_core/functions/logger_path.py
 src/nestify_core/functions/provider_openai.py
 src/nestify_core/tools/__init__.py
+src/nestify_core/tools/list_dir.py
+src/nestify_core/tools/read_file.py
+src/nestify_core/tools/replace_in_file.py
 src/nestify_core/tools/shell.py
+src/nestify_core/tools/write_file.py

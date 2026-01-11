@@ -31,7 +31,6 @@ class Core:
     Core orchestrates the main components of the Nestify system:
     - Loads configuration and logger
     - Initializes LLM, memory, tool/skills managers, agent, and MCP
-    - Provides startup() for LLM connectivity probe
     - Provides exec_once() for single-shot text execution
     """
     def __init__(self):
@@ -48,11 +47,7 @@ class Core:
         self.mcp = MCP()
         self.agent = Agent(self.memory, self.tool_manager, self.llm, self.logger)
 
-    def startup(self) -> int | None:
-        """
-        Old code that should be removed in future versions.
-        """
-        return
+
     
     def generate(self, text: str, **kwargs):
         """
@@ -60,6 +55,8 @@ class Core:
         This keeps Core thin and the Agent responsible for orchestration.
         """
         return self.agent.generate(text, **kwargs)
+    
+    
         
     def exec_once(self, text: str) -> int:
         """
