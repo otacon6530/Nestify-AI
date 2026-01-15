@@ -28,7 +28,7 @@ def generate_openai(prompt: str, model: str, base_url: str | None, api_key: str 
         headers["Accept"] = "text/event-stream"
     url = (base_url or "").rstrip("/") + "/chat/completions"
     payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "stream": stream}
-    r = requests.post(url, json=payload, headers=headers, timeout=60, stream=stream)
+    r = requests.post(url, json=payload, headers=headers, timeout=300, stream=stream)
     r.raise_for_status()
     if stream:
         def gen():

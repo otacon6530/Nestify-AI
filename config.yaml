@@ -1,7 +1,7 @@
 llm:
   # OpenAI configuration (uncomment and set to use OpenAI):
   provider: openai
-  model: qwen3:4b
+  model: nemotron-3-nano:latest
   embed_model: mxbai-embed-large:latest
   api_key: YOUR_OPENAI_API_KEY
   base_url: http://apple.stephensdev.com:11434/v1
