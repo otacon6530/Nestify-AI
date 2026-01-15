@@ -73,10 +73,8 @@ class Agent:
             return None
         return None
     
-    
     def plan(self, text, actions):
         plan = []
-        import json
         planning_prompt = (
             "You are Nestify Agent.\n"
             "Plan your approach BEFORE answering.\n"
@@ -116,6 +114,7 @@ class Agent:
             f"User message:\n{text}\n"
         )
         return self.extract_plan(self.getResponse(planning_prompt, stream=False))
+    
     def tools(self, actions, step):
         tool_name = step.get("name")
         tool_args = step.get("args", {})
@@ -124,6 +123,7 @@ class Agent:
             actions.append({"type": "tool", "name": tool_name, "args": tool_args, "result": tool_result})
         else:
             actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
+    
     def think(self, actions, text):
         think_prompt = (
             "You are Nestify Agent.\n"
@@ -131,13 +131,13 @@ class Agent:
             f"Latest user message: {text}"
         )
         return self.getResponse(think_prompt, stream=False)
-    def done_check(self, plan, actions, text=None):
+    
+    def done_check(self, plan, actions, text):
         done_when = plan.get("done_when", "").lower()
         if not done_when:
             return False
         # Ask the LLM if the request is satisfied
         review_prompt = (
-            "You are Nestify Agent.\n"
             "Based on the following actions and the original user request, is the request fully satisfied?\n"
             "Reply with 'true' if done, 'false' if more steps are needed.\n\n"
             f"User request: {text}\n"
@@ -152,7 +152,7 @@ class Agent:
         max_exec_steps = 200
         done = False
         
-        while max_exec_steps > 0 or not done:
+        while max_exec_steps > 0 and not done:
             max_exec_steps -= 1
             plan = self.plan(text, actions)
             if plan and 'steps' in plan:
@@ -162,13 +162,19 @@ class Agent:
                     self.tools(actions, step)   
                 elif s_type == "think":
                     self.think(actions, text)
-            done = self.done_check(plan, actions)
-        return self.getResponse("Hi", stream=False)
+            done = self.done_check(plan, actions, text)
+        return actions
 
     def generate(self, text: str, **kwargs):
+        actions = self.execute(text)
+        prompt = (
+            "Summarize the actions base on the request.\n\n"
+            "Keep in mind that no actions were communicated back to the user yet and will need to be in your response.\n\n"
+            f"User request: {text}\n"
+            f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+        )
+        response_text = self.getResponse(prompt, stream=False)
         
-        response_text = self.execute(text)
-
         #Stream the response if requested
         stream = kwargs.get("stream", False)
         if stream:      
