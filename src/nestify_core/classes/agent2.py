@@ -75,8 +75,14 @@ class Agent:
     
     def plan(self, text, actions):
         planning_prompt = (
-            "You are Nestify Agent.\n"
+            f"Actions Taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+            f"Available tools:\n{str(self.tool_manager.list_tools())}\n"
+            f"User message:\n{text}\n\n"
+            "Instructions:\n"
             "Plan your approach BEFORE answering.\n"
+            "If you need more information to fully address the request, include steps to gather it first (e.g., list files in a folder before reading them).\n"
+            "Decompose the user request into all necessary steps, including any information-gathering actions.\n"
+            "After listing steps, self-check: Does this plan fully address every part of the request? If not, revise and expand until complete.\n"
             "Return ONLY a single fenced plan block in the exact format below. No prose.\n\n"
             "Fence and JSON schema:\n"
             "```plan\n"
@@ -96,21 +102,22 @@ class Agent:
             "- If no tools are needed (e.g., greetings), return a minimal plan with one think step.\n\n"
             "- Include a measurable done_when condition (e.g., 'all files read', 'API response validated').\n"
             "- Do not end with a summary unless explicitly requested; finish by completing the steps.\n\n"
+            "- If you need to know what files or items exist before acting, include a step to gather that information first.\n"
+            "- Self-check: After listing steps, confirm the plan covers every aspect of the user request. If not, revise and expand.\n\n"
             "Example:\n"
             "```plan\n"
             "{\n"
-            '  "goal": "Review classes under src/nestify_core/classes",\n'
+            '  "goal": "Review all classes under src/nestify_core/classes",\n'
             '  "steps": [\n'
             '    {"type":"tool","name":"list_dir","args":{"path":"src/nestify_core/classes"}},\n'
+            '    {"type":"think","instruction":"Identify all class files from the directory listing"},\n'
             '    {"type":"tool","name":"read_file","args":{"path":"src/nestify_core/classes/agent.py"}},\n'
             '    {"type":"think","instruction":"Summarize agent.py briefly"}\n'
             "  ],\n"
             '  "done_when": "Summaries produced for each class file"\n'
             "}\n"
             "```\n\n"
-            f"Available tools:\n{str(self.tool_manager.list_tools())}\n"
-            f"Actions Taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
-            f"User message:\n{text}\n"
+           
         )
         return self.extract_plan(self.getResponse(planning_prompt, stream=False))
     
@@ -121,9 +128,11 @@ class Agent:
             tool_result = self.tool_manager.invoke(tool_name, **tool_args)
             actions.append({"type": "tool", "name": tool_name, "args": tool_args, "result": tool_result})
             self.logger.log("INFO", f"Tool {tool_name} invoked with args {tool_args}, result: {tool_result}")
+            return True
         else:
             actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
             self.logger.error(f"Attempted to invoke unknown tool: {tool_name}")
+            return False
     
     def think(self, actions, step, text):
         instruction = step.get("instruction", "")
@@ -139,6 +148,9 @@ class Agent:
         return response
     
     def done_check(self, plan, actions, text):
+        if not plan:
+            self.logger.log("ERROR", "Plan is None in done_check.")
+            return False
         done_when = plan.get("done_when", "").lower()
         if not done_when:
             return False
@@ -147,7 +159,6 @@ class Agent:
             "Based on the following actions and the original user request, is the request fully satisfied?\n"
             "Reply with 'true' if done, 'false' if more steps are needed.\n\n"
             f"User request: {text}\n"
-            f"Plan done_when: {done_when}\n"
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         resp = self.getResponse(review_prompt, stream=False)
@@ -162,14 +173,20 @@ class Agent:
         while max_exec_steps > 0 and not done:
             max_exec_steps -= 1
             plan = self.plan(text, actions)
-            if plan and 'steps' in plan:
-                step = plan['steps'][0]
+            if not plan:
+                self.logger.log("ERROR", "Plan is None in execute. Aborting execution loop.")
+                break
+            if 'steps' not in plan or not plan['steps']:
+                self.logger.log("ERROR", "Plan missing 'steps' in execute. Aborting execution loop.")
+                break
+            for step in plan['steps']:
                 s_type = step.get("type")
                 if s_type == "tool":
-                    self.tools(actions, step)   
+                    if(self.tools(actions, step) == False):
+                        break
                 elif s_type == "think":
                     self.think(actions, step, text)
-            done = self.done_check(plan, actions, text)
+            #done = self.done_check(plan, actions, text)
         if max_exec_steps == 0:
             self.logger.warning("Maximum execution steps reached without completing the task.")
         self.logger.log("INFO", f"Execution completed. Actions taken: {len(actions)}")
