@@ -139,9 +139,8 @@ class Agent:
         think_prompt = (
             f"Instruction: {instruction}\n"
             f"steps taken so far:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
-            f"Latest user message: {text}"
         )
-        response = self.getResponse(think_prompt, stream=False)
+        response = self.execute(think_prompt) #self.getResponse(think_prompt, stream=False)
         actions.append({"type": "think", "instruction": instruction, "text": response})
         self.logger.log("INFO", f"instruction executed: {instruction}") 
         self.logger.log("INFO", f"Think step completed with response: {response}") 
@@ -175,10 +174,10 @@ class Agent:
             plan = self.plan(text, actions)
             if not plan:
                 self.logger.log("ERROR", "Plan is None in execute. Aborting execution loop.")
-                break
+                continue
             if 'steps' not in plan or not plan['steps']:
                 self.logger.log("ERROR", "Plan missing 'steps' in execute. Aborting execution loop.")
-                break
+                continue
             for step in plan['steps']:
                 s_type = step.get("type")
                 if s_type == "tool":
