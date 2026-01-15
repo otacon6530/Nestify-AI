@@ -23,7 +23,7 @@ from .classes.memory import Memory
 from .classes.tool_manager import ToolManager
 from .classes.skills_manager import SkillsManager
 from .classes.mcp import MCP
-from .classes.agent import Agent
+from .classes.agent2 import Agent
 from .functions.error_envelope import build_error_envelope, emit_error
 
 class Core:

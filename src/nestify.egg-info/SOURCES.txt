@@ -16,6 +16,7 @@ src/nestify_core/core.py
 src/nestify_core/agents/default.py
 src/nestify_core/classes/__init__.py
 src/nestify_core/classes/agent.py
+src/nestify_core/classes/agent2.py
 src/nestify_core/classes/agent_base.py
 src/nestify_core/classes/arg_manager.py
 src/nestify_core/classes/config.py
