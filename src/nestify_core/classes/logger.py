@@ -13,6 +13,15 @@ class Logger:
         """
         log_event(self._logger, level, message, **extra)
 
+    def error(self, message: str, **extra):
+        self.log("ERROR", message, **extra)
+
+    def warning(self, message: str, **extra):
+        self.log("WARNING", message, **extra)
+
+    def info(self, message: str, **extra):
+        self.log("INFO", message, **extra)
+
     # Expose underlying logger if needed
     @property
     def raw(self) -> logging.Logger:

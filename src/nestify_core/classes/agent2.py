@@ -186,7 +186,7 @@ class Agent:
                         break
                 elif s_type == "think":
                     self.think(actions, step, text)
-            #done = self.done_check(plan, actions, text)
+            done = self.done_check(plan, actions, text)
         if max_exec_steps == 0:
             self.logger.warning("Maximum execution steps reached without completing the task.")
         self.logger.log("INFO", f"Execution completed. Actions taken: {len(actions)}")
