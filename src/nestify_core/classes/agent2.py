@@ -120,7 +120,7 @@ class Agent:
         if tool_name in self.tool_manager.tools:
             tool_result = self.tool_manager.invoke(tool_name, **tool_args)
             actions.append({"type": "tool", "name": tool_name, "args": tool_args, "result": tool_result})
-            self.logger.info(f"Tool {tool_name} invoked with args {tool_args}, result: {tool_result}")
+            self.logger.log("INFO", f"Tool {tool_name} invoked with args {tool_args}, result: {tool_result}")
         else:
             actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
             self.logger.error(f"Attempted to invoke unknown tool: {tool_name}")
@@ -133,7 +133,7 @@ class Agent:
         )
         response = self.getResponse(think_prompt, stream=False)
         actions.append({"type": "think", "text": response})
-        self.logger.info(f"Think step completed with response: {response}") 
+        self.logger.log("INFO", f"Think step completed with response: {response}") 
         return response
     
     def done_check(self, plan, actions, text):
@@ -149,7 +149,7 @@ class Agent:
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         resp = self.getResponse(review_prompt, stream=False)
-        self.logger.info(f"Done check response: {resp}")
+        self.logger.log("INFO", f"Done check response: {resp}")
         return "true" in resp.lower()
     
     def execute(self, text):
@@ -170,7 +170,7 @@ class Agent:
             done = self.done_check(plan, actions, text)
         if max_exec_steps == 0:
             self.logger.warning("Maximum execution steps reached without completing the task.")
-        self.logger.info(f"Execution completed. Actions taken: {len(actions)}")
+        self.logger.log("INFO", f"Execution completed. Actions taken: {len(actions)}")
         return actions
 
     def generate(self, text: str, **kwargs):
@@ -184,7 +184,7 @@ class Agent:
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         response_text = self.getResponse(prompt, stream=False)
-        self.logger.info(f"Final response generated: {response_text}")
+        self.logger.log(f"Final response generated: {response_text}")
         
         #Stream the response if requested
         stream = kwargs.get("stream", False)
