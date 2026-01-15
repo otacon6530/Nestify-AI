@@ -74,7 +74,6 @@ class Agent:
         return None
     
     def plan(self, text, actions):
-        plan = []
         planning_prompt = (
             "You are Nestify Agent.\n"
             "Plan your approach BEFORE answering.\n"
@@ -121,8 +120,10 @@ class Agent:
         if tool_name in self.tool_manager.tools:
             tool_result = self.tool_manager.invoke(tool_name, **tool_args)
             actions.append({"type": "tool", "name": tool_name, "args": tool_args, "result": tool_result})
+            self.logger.info(f"Tool {tool_name} invoked with args {tool_args}, result: {tool_result}")
         else:
             actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
+            self.logger.error(f"Attempted to invoke unknown tool: {tool_name}")
     
     def think(self, actions, text):
         think_prompt = (
@@ -130,7 +131,10 @@ class Agent:
             "Use the notes below to perform the current plan step.\n\n"
             f"Latest user message: {text}"
         )
-        return self.getResponse(think_prompt, stream=False)
+        response = self.getResponse(think_prompt, stream=False)
+        actions.append({"type": "think", "text": response})
+        self.logger.info(f"Think step completed with response: {response}") 
+        return response
     
     def done_check(self, plan, actions, text):
         done_when = plan.get("done_when", "").lower()
@@ -145,6 +149,7 @@ class Agent:
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         resp = self.getResponse(review_prompt, stream=False)
+        self.logger.info(f"Done check response: {resp}")
         return "true" in resp.lower()
     
     def execute(self, text):
@@ -163,17 +168,23 @@ class Agent:
                 elif s_type == "think":
                     self.think(actions, text)
             done = self.done_check(plan, actions, text)
+        if max_exec_steps == 0:
+            self.logger.warning("Maximum execution steps reached without completing the task.")
+        self.logger.info(f"Execution completed. Actions taken: {len(actions)}")
         return actions
 
     def generate(self, text: str, **kwargs):
+        with open("log.txt", "w"):
+            pass
         actions = self.execute(text)
         prompt = (
-            "Summarize the actions base on the request.\n\n"
-            "Keep in mind that no actions were communicated back to the user yet and will need to be in your response.\n\n"
+            "Summarize the results of the following actions in response to the user's request.\n\n"
+            "Respond as if you are directly answering the user, clearly communicating any findings, results, or next steps.\n\n"
             f"User request: {text}\n"
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         response_text = self.getResponse(prompt, stream=False)
+        self.logger.info(f"Final response generated: {response_text}")
         
         #Stream the response if requested
         stream = kwargs.get("stream", False)
