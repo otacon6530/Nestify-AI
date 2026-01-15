@@ -125,14 +125,16 @@ class Agent:
             actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
             self.logger.error(f"Attempted to invoke unknown tool: {tool_name}")
     
-    def think(self, actions, text):
+    def think(self, actions, step, text):
+        instruction = step.get("instruction", "")
         think_prompt = (
-            "You are Nestify Agent.\n"
-            "Use the notes below to perform the current plan step.\n\n"
+            f"Instruction: {instruction}\n"
+            f"steps taken so far:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
             f"Latest user message: {text}"
         )
         response = self.getResponse(think_prompt, stream=False)
-        actions.append({"type": "think", "text": response})
+        actions.append({"type": "think", "instruction": instruction, "text": response})
+        self.logger.log("INFO", f"instruction executed: {instruction}") 
         self.logger.log("INFO", f"Think step completed with response: {response}") 
         return response
     
@@ -166,7 +168,7 @@ class Agent:
                 if s_type == "tool":
                     self.tools(actions, step)   
                 elif s_type == "think":
-                    self.think(actions, text)
+                    self.think(actions, step, text)
             done = self.done_check(plan, actions, text)
         if max_exec_steps == 0:
             self.logger.warning("Maximum execution steps reached without completing the task.")
@@ -184,7 +186,7 @@ class Agent:
             f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
         )
         response_text = self.getResponse(prompt, stream=False)
-        self.logger.log(f"Final response generated: {response_text}")
+        self.logger.log("INFO", f"Final response generated: {response_text}")
         
         #Stream the response if requested
         stream = kwargs.get("stream", False)
