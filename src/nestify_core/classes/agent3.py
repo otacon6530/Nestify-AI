@@ -56,6 +56,7 @@ class Agent:
     def generate_plan(self, clarified_request):
         """
         Use LLM to output a plan of tool calls and think steps.
+        Adds logging for tracing.
         """
         plan_prompt = (
             f"Given the clarified request, output a plan as a JSON array of steps.\n"
@@ -68,7 +69,9 @@ class Agent:
             "]\n"
             f"Request: {clarified_request}"
         )
+        self.logger.log("DEBUG", f"Planning with prompt: {plan_prompt}")
         plan = self.llm.generate(plan_prompt, stream=False)
+        self.logger.log("DEBUG", f"Plan output: {plan}")
         return plan
 
     def execute_plan(self, plan):
@@ -177,8 +180,24 @@ class Agent:
     def generate(self, user_request, stream=False, **kwargs):
         """
         Streaming version of generate.
+        Clears log.txt before execution.
+        Adds detailed logging for tracing.
         """
-        if stream:
-            return self.orchestrate(user_request, stream=True)
-        else:
-            return self.orchestrate(user_request, stream=False)
+        try:
+            with open("log.txt", "w"):
+                pass
+        except Exception:
+            pass
+        self.logger.log("INFO", f"generate() called with user_request: {user_request}", stream=stream)
+        result = None
+        try:
+            if stream:
+                self.logger.log("DEBUG", "Starting orchestrate in streaming mode.")
+                result = self.orchestrate(user_request, stream=True)
+            else:
+                self.logger.log("DEBUG", "Starting orchestrate in non-streaming mode.")
+                result = self.orchestrate(user_request, stream=False)
+            self.logger.log("INFO", "generate() completed successfully.")
+        except Exception as exc:
+            self.logger.error(f"Exception in generate: {exc}")
+        return result
