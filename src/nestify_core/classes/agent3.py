@@ -13,7 +13,12 @@ class Agent:
         Pull latest memory and condense to minimal JSON string.
         """
         mem = self.memory.get_latest()
-        # Example: Only keep recent, relevant, and high-value context
+        if isinstance(mem, str):
+            try:
+                mem = json.loads(mem)
+            except Exception:
+                mem = {}
+        # Only keep recent, relevant, and high-value context
         condensed = {
             "recent": mem.get("recent", []),
             "important": mem.get("important", []),
@@ -105,8 +110,12 @@ class Agent:
         if user_request.strip().lower() in ["hello", "hi", "hey", "tell me a joke"]:
             response = self.llm.generate(user_request, stream=stream)
             if stream:
-                for token in response.split():
-                    yield token + " "
+                if hasattr(response, '__iter__') and not isinstance(response, str):
+                    for token in response:
+                        yield token
+                else:
+                    for token in str(response).split():
+                        yield token + " "
             else:
                 return response
         else:
@@ -125,8 +134,12 @@ class Agent:
             )
             summary = self.llm.generate(summary_prompt, stream=stream)
             if stream:
-                for token in summary.split():
-                    yield token + " "
+                if hasattr(summary, '__iter__') and not isinstance(summary, str):
+                    for token in summary:
+                        yield token
+                else:
+                    for token in str(summary).split():
+                        yield token + " "
             else:
                 return summary
 
