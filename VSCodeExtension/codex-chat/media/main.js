@@ -5,7 +5,7 @@
 
     // Modal for shell approval
     let shellApprovalResolve = null;
-    function showShellApprovalDialog(command, id) {
+    function showShellApprovalDialog(command, id, reason) {
         let modal = document.getElementById('shell-approval-modal');
         if (!modal) {
             modal = document.createElement('div');
@@ -24,6 +24,7 @@
                 <div style="background: var(--vscode-editor-background, #222); color: var(--vscode-editor-foreground, #fff); padding: 2em; border-radius: 8px; min-width: 320px; max-width: 90vw; box-shadow: 0 2px 16px #0008;">
                     <h3>Approve Shell Command</h3>
                     <div style="margin-bottom: 1em; word-break: break-all;"><code id="shell-approval-command"></code></div>
+                    <div id="shell-approval-reason" style="margin-bottom: 1em; font-size: 0.9em; opacity: 0.8;"></div>
                     <div style="display: flex; gap: 0.5em; justify-content: flex-end;">
                         <button id="shell-approve">Approve</button>
                         <button id="shell-approve-all">Approve All for Session</button>
@@ -34,11 +35,20 @@
             document.body.appendChild(modal);
         }
         modal.querySelector('#shell-approval-command').textContent = command;
+        const reasonEl = modal.querySelector('#shell-approval-reason');
+        if (reason && reasonEl) {
+            reasonEl.textContent = reason;
+            reasonEl.style.display = '';
+        } else if (reasonEl) {
+            reasonEl.textContent = '';
+            reasonEl.style.display = 'none';
+        }
         modal.style.display = 'flex';
         setSendEnabled(false);
         function cleanup() {
             modal.style.display = 'none';
             shellApprovalResolve = null;
+            setSendEnabled(true);
         }
         modal.querySelector('#shell-approve').onclick = () => {
             vscode.postMessage({ type: 'shell_approval_response', id, approved: true, approve_all: false });
@@ -450,7 +460,7 @@
                 setControlsEnabled(!!message.enabled);
                 break;
             case 'shell_approval_request':
-                showShellApprovalDialog(message.command, message.id);
+                showShellApprovalDialog(message.command, message.id, message.reason);
                 break;
             default:
                 break;

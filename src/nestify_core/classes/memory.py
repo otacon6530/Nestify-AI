@@ -1,5 +1,6 @@
 from datetime import datetime
 import math
+import json
 
 class Memory:
 
@@ -9,6 +10,15 @@ class Memory:
     If an embedding function is provided, supports vector-based similarity search.
     Otherwise, falls back to keyword search.
     Each entry includes text, metadata, timestamp, and (optionally) embedding.
+
+    ---
+    Working Memory Buffer:
+    ---------------------
+    This class also provides a temporary, non-persistent "working memory" buffer for multi-step LLM reasoning.
+    - Working memory is NOT included in normal memory search/history and is NOT persisted.
+    - It is intended for storing a rolling context (e.g., intermediate responses, tool results) during a single multi-step response.
+    - Use add_working() to append, get_working() to retrieve (optionally clear), and clear_working() to reset the buffer.
+    - Working memory is cleared between requests or when a multi-step response is complete.
     """
     def __init__(self, embed_fn=None):
         """
@@ -18,6 +28,37 @@ class Memory:
         """
         self._items = []  # Each item: dict with text, embedding, metadata, timestamp
         self._embed_fn = embed_fn
+        self._working_memory = []  # Temporary buffer for multi-step LLM reasoning
+
+    def add_working(self, text):
+        """
+        Append a string to the working memory buffer.
+        Args:
+            text: The string (e.g., intermediate response, tool result) to append.
+        Note:
+            Working memory is temporary and not persisted. Use for multi-step LLM reasoning only.
+        """
+        self._working_memory.append(text)
+
+    def get_working(self, clear=False):
+        """
+        Retrieve the current working memory buffer as a single string.
+        Args:
+            clear: If True, clear the buffer after retrieval (default False).
+        Returns:
+            The concatenated working memory string (or empty string if buffer is empty).
+        """
+        result = "\n".join(self._working_memory)
+        if clear:
+            self.clear_working()
+        return result
+
+    def clear_working(self):
+        """
+        Clear the working memory buffer.
+        Use this to reset temporary context between multi-step LLM responses.
+        """
+        self._working_memory = []
 
     def latest(self, count=5):
         """
@@ -36,6 +77,12 @@ class Memory:
             text: The text or code snippet to store.
             metadata: Optional dict of metadata (e.g., source, tags).
         """
+        # Coerce non-string inputs to a safe string representation
+        if not isinstance(text, str):
+            try:
+                text = json.dumps(text, ensure_ascii=False)
+            except Exception:
+                text = str(text)
         item = {
             "text": text,
             "metadata": metadata or {},
@@ -56,6 +103,12 @@ class Memory:
         Returns:
             List of matching memory items (dicts).
         """
+        # Coerce non-string query to string to avoid attribute errors
+        if not isinstance(query, str):
+            try:
+                query = json.dumps(query, ensure_ascii=False)
+            except Exception:
+                query = str(query)
         if self._embed_fn:
             query_vec = self._embed_fn(query)
             if query_vec is None:
@@ -74,18 +127,20 @@ class Memory:
                 scored.sort(key=lambda x: x[1], reverse=True)
                 return [item for item, _ in scored[:top_k]]
         # Fallback: keyword search with simple token overlap scoring
-        query_terms = {token for token in query.lower().split() if len(token) > 2}
+        query_lower = query.lower() if isinstance(query, str) else str(query).lower()
+        query_terms = {token for token in query_lower.split() if len(token) > 2}
         scored_results = []
         for item in self._items:
-            text_lower = item["text"].lower()
+            text_val = item.get("text", "")
+            text_lower = text_val.lower() if isinstance(text_val, str) else str(text_val).lower()
             if query_terms:
                 item_terms = {token for token in text_lower.split() if len(token) > 2}
                 overlap = len(query_terms & item_terms)
                 if overlap > 0:
                     scored_results.append((item, overlap))
-                elif query.lower() in text_lower:
+                elif query_lower in text_lower:
                     scored_results.append((item, 1))
-            elif query.lower() in text_lower:
+            elif query_lower in text_lower:
                 scored_results.append((item, 1))
         scored_results.sort(key=lambda pair: pair[1], reverse=True)
         return [item for item, _ in scored_results[:top_k]]

@@ -24,10 +24,11 @@ class ToolManager:
             # Look for a function with TOOL_NAME and TOOL_DESCRIPTION
             tool_name = getattr(module, "TOOL_NAME", None)
             tool_desc = getattr(module, "TOOL_DESCRIPTION", "")
+            requires_approval = bool(getattr(module, "TOOL_REQUIRES_APPROVAL", False))
             # Convention: function named <tool_name>_tool
             func = getattr(module, f"{tool_name}_tool", None) if tool_name else None
             if tool_name and func:
-                self.register(tool_name, func, description=tool_desc)
+                self.register(tool_name, func, description=tool_desc, requires_approval=requires_approval)
 
     def register(self, name: str, func, description: str = "", requires_approval: bool = False):
         self.tools[name] = func
@@ -40,6 +41,9 @@ class ToolManager:
             raise KeyError(f"Unknown tool {name}")
         return self.tools[name](*args, **kwargs)
 
+    def needs_approval(self, name: str) -> bool:
+        return name in self.requires_approval
+
     def list_tools(self):
         """Return a list of tool metadata: name and description."""
         return [
@@ -47,20 +51,34 @@ class ToolManager:
             for name, info in self.tool_info.items()
         ]
 
-        def extract_tool_call(response_text):
-            # Look for a code block with ```tool
-            match = re.search(r"```tool\\s*(\\{.*?\\})\\s*```", response_text, re.DOTALL)
-            if match:
-                try:
-                    tool_call = json.loads(match.group(1))
-                    return tool_call
-                except Exception:
-                    return None
-            # Fallback: try to parse any JSON in the response
+    def extract_tool_call(self, response_text):
+        """Extract a structured tool call without invoking it."""
+
+        def _structure(parsed_call):
+            if not isinstance(parsed_call, dict):
+                return None
+            tool_name = parsed_call.get("name")
+            if not tool_name:
+                return None
+            return {
+                "name": tool_name,
+                "args": parsed_call.get("args", {}) or {},
+                "raw": parsed_call,
+            }
+
+        match = re.search(r"```tool\s*({.*?})\s*```", response_text, re.DOTALL)
+        if match:
             try:
-                tool_call = json.loads(response_text)
-                if "tool_call" in tool_call or ("name" in tool_call and "args" in tool_call):
-                    return tool_call
+                tool_call = json.loads(match.group(1))
+                return _structure(tool_call)
             except Exception:
-                pass
-            return None
+                return None
+        try:
+            tool_call = json.loads(response_text)
+            if "tool_call" in tool_call:
+                return _structure(tool_call.get("tool_call"))
+            if "name" in tool_call and "args" in tool_call:
+                return _structure(tool_call)
+        except Exception:
+            pass
+        return None

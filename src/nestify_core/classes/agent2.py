@@ -1,0 +1,216 @@
+import json
+class Agent:
+    """
+    Agent class for orchestrating LLM reasoning, tool use, and memory.
+    Supports loading agent subclasses from the agents folder by name.
+    """
+    def __init__(self, memory, tool_manager, llm, logger):
+        self.system_prompt = "You are Nestify Agent"
+        self.memory = memory
+        self.tool_manager = tool_manager
+        self.llm = llm
+        self.logger = logger
+        # Track per-tool session approvals (e.g., approve-all choices)
+        self.session_tool_approvals = {}
+
+    def getResponse(self, prompt: str, **kwargs):
+        """
+        Non-yielding helper that always returns a plain string.
+        If stream=True, consumes the stream internally and optionally forwards
+        events via an on_event callback.
+        """
+        stream = bool(kwargs.pop("stream", False))
+        on_event = kwargs.pop("on_event", None)
+
+        if stream:
+            response_text = ""
+            for event in self.llm.generate(prompt, stream=True, **kwargs):
+                if isinstance(event, dict):
+                    if event.get("type") == "token":
+                        response_text += event.get("value", "")
+                        if callable(on_event):
+                            try:
+                                on_event(event)
+                            except Exception:
+                                pass
+                    elif event.get("type") == "final":
+                        final_text = event.get("result", {}).get("text", response_text)
+                        if callable(on_event):
+                            try:
+                                on_event(event)
+                            except Exception:
+                                pass
+                        return final_text or response_text
+            return response_text
+        else:
+            result = self.llm.generate(prompt, **kwargs)
+            if isinstance(result, dict):
+                return (result.get("output") or result.get("text") or "")
+            # Fallback: stringify unexpected provider return types
+            return str(result or "")
+        
+    def extract_plan(self, text: str):
+        """
+        Extract a structured plan from a fenced ```plan block or a top-level JSON object.
+        Returns a dict if found and parsed successfully, else None.
+        """
+        if not isinstance(text, str):
+            return None
+        try:
+            fence = "```plan"
+            start_fence = text.find(fence)
+            if start_fence != -1:
+                start_json = text.find("{", start_fence)
+                end_fence = text.find("```", start_json + 1)
+                if start_json != -1 and end_fence != -1:
+                    raw = text[start_json:end_fence]
+                    return json.loads(raw)
+            first = text.find("{")
+            last = text.rfind("}")
+            if first != -1 and last != -1 and last > first:
+                return json.loads(text[first:last + 1])
+        except Exception:
+            return None
+        return None
+    
+    def plan(self, text, actions):
+        planning_prompt = (
+            f"Actions Taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+            f"Available tools:\n{str(self.tool_manager.list_tools())}\n"
+            f"User message:\n{text}\n\n"
+            "Instructions:\n"
+            "Plan your approach BEFORE answering.\n"
+            "If you need more information to fully address the request, include steps to gather it first (e.g., list files in a folder before reading them).\n"
+            "Decompose the user request into all necessary steps, including any information-gathering actions.\n"
+            "After listing steps, self-check: Does this plan fully address every part of the request? If not, revise and expand until complete.\n"
+            "Return ONLY a single fenced plan block in the exact format below. No prose.\n\n"
+            "Fence and JSON schema:\n"
+            "```plan\n"
+            "{\n"
+            '  "goal": "<short optional goal>",\n'
+            '  "steps": [\n'
+            '    {"type": "tool", "name": "<tool_name>", "args": { /* JSON args */ }},\n'
+            '    {"type": "think", "instruction": "<concise internal analysis step>"}\n'
+            "  ],\n"
+            '  "done_when": "<optional completion condition>"\n'
+            "}\n"
+            "```\n"
+            "Rules:\n"
+            "- Use only the available tools shown below when planning tool steps.\n"
+            "- Each step is a valid JSON object. No comments and no trailing commas.\n"
+            "- Do NOT output anything before or after the fenced plan block.\n"
+            "- If no tools are needed (e.g., greetings), return a minimal plan with one think step.\n\n"
+            "- Include a measurable done_when condition (e.g., 'all files read', 'API response validated').\n"
+            "- Do not end with a summary unless explicitly requested; finish by completing the steps.\n\n"
+            "- If you need to know what files or items exist before acting, include a step to gather that information first.\n"
+            "- Self-check: After listing steps, confirm the plan covers every aspect of the user request. If not, revise and expand.\n\n"
+            "Example:\n"
+            "```plan\n"
+            "{\n"
+            '  "goal": "Review all classes under src/nestify_core/classes",\n'
+            '  "steps": [\n'
+            '    {"type":"tool","name":"list_dir","args":{"path":"src/nestify_core/classes"}},\n'
+            '    {"type":"think","instruction":"Identify all class files from the directory listing"},\n'
+            '    {"type":"tool","name":"read_file","args":{"path":"src/nestify_core/classes/agent.py"}},\n'
+            '    {"type":"think","instruction":"Summarize agent.py briefly"}\n'
+            "  ],\n"
+            '  "done_when": "Summaries produced for each class file"\n'
+            "}\n"
+            "```\n\n"
+           
+        )
+        return self.extract_plan(self.getResponse(planning_prompt, stream=False))
+    
+    def tools(self, actions, step):
+        tool_name = step.get("name")
+        tool_args = step.get("args", {})
+        if tool_name in self.tool_manager.tools:
+            tool_result = self.tool_manager.invoke(tool_name, **tool_args)
+            actions.append({"type": "tool", "name": tool_name, "args": tool_args, "result": tool_result})
+            self.logger.log("INFO", f"Tool {tool_name} invoked with args {tool_args}, result: {tool_result}")
+            return True
+        else:
+            actions.append({"type": "error", "message": f"Unknown tool {tool_name}"})
+            self.logger.error(f"Attempted to invoke unknown tool: {tool_name}")
+            return False
+    
+    def think(self, actions, step, text):
+        instruction = step.get("instruction", "")
+        think_prompt = (
+            f"Instruction: {instruction}\n"
+            f"steps taken so far:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+        )
+        response = self.execute(think_prompt) #self.getResponse(think_prompt, stream=False)
+        actions.append({"type": "think", "instruction": instruction, "text": response})
+        self.logger.log("INFO", f"instruction executed: {instruction}") 
+        self.logger.log("INFO", f"Think step completed with response: {response}") 
+        return response
+    
+    def done_check(self, plan, actions, text):
+        if not plan:
+            self.logger.log("ERROR", "Plan is None in done_check.")
+            return False
+        done_when = plan.get("done_when", "").lower()
+        if not done_when:
+            return False
+        # Ask the LLM if the request is satisfied
+        review_prompt = (
+            "Based on the following actions and the original user request, is the request fully satisfied?\n"
+            "Reply with 'true' if done, 'false' if more steps are needed.\n\n"
+            f"User request: {text}\n"
+            f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+        )
+        resp = self.getResponse(review_prompt, stream=False)
+        self.logger.log("INFO", f"Done check response: {resp}")
+        return "true" in resp.lower()
+    
+    def execute(self, text):
+        actions = []
+        max_exec_steps = 200
+        done = False
+        
+        while max_exec_steps > 0 and not done:
+            max_exec_steps -= 1
+            plan = self.plan(text, actions)
+            if not plan:
+                self.logger.log("ERROR", "Plan is None in execute. Aborting execution loop.")
+                continue
+            if 'steps' not in plan or not plan['steps']:
+                self.logger.log("ERROR", "Plan missing 'steps' in execute. Aborting execution loop.")
+                continue
+            for step in plan['steps']:
+                s_type = step.get("type")
+                if s_type == "tool":
+                    if(self.tools(actions, step) == False):
+                        break
+                elif s_type == "think":
+                    self.think(actions, step, text)
+            done = self.done_check(plan, actions, text)
+        if max_exec_steps == 0:
+            self.logger.warning("Maximum execution steps reached without completing the task.")
+        self.logger.log("INFO", f"Execution completed. Actions taken: {len(actions)}")
+        return actions
+
+    def generate(self, text: str, **kwargs):
+        with open("log.txt", "w"):
+            pass
+        actions = self.execute(text)
+        prompt = (
+            "Summarize the results of the following actions in response to the user's request.\n\n"
+            "Respond as if you are directly answering the user, clearly communicating any findings, results, or next steps.\n\n"
+            f"User request: {text}\n"
+            f"Actions taken:\n{chr(10).join(json.dumps(a) for a in actions)}\n"
+        )
+        response_text = self.getResponse(prompt, stream=False)
+        self.logger.log("INFO", f"Final response generated: {response_text}")
+        
+        #Stream the response if requested
+        stream = kwargs.get("stream", False)
+        if stream:      
+            # Simulate streaming by yielding tokens one by one
+            for token in response_text.split():
+                yield {"type": "token", "value": token + " "}
+            yield {"type": "final", "result": {"text": response_text}}
+        else:
+            # Return a dict with expected keys for compatibility
+            return {"output": response_text, "text": response_text, "actions": [{"type": "llm", "text": response_text}]}

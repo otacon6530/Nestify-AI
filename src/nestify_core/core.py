@@ -16,7 +16,6 @@ Copyright (c) Nestify contributors. MIT License.
 
 from __future__ import annotations
 import sys
-import uuid
 from .classes.config import Config
 from .classes.logger import Logger
 from .classes.llm import LLM
@@ -24,7 +23,7 @@ from .classes.memory import Memory
 from .classes.tool_manager import ToolManager
 from .classes.skills_manager import SkillsManager
 from .classes.mcp import MCP
-from .classes.agent import Agent
+from .classes.agent3 import Agent
 from .functions.error_envelope import build_error_envelope, emit_error
 
 class Core:
@@ -32,7 +31,6 @@ class Core:
     Core orchestrates the main components of the Nestify system:
     - Loads configuration and logger
     - Initializes LLM, memory, tool/skills managers, agent, and MCP
-    - Provides startup() for LLM connectivity probe
     - Provides exec_once() for single-shot text execution
     """
     def __init__(self):
@@ -47,86 +45,18 @@ class Core:
         self.tool_manager = ToolManager()
         self.skills_manager = SkillsManager(self.tool_manager)
         self.mcp = MCP()
-        self.agent = Agent()
+        self.agent = Agent(self.memory, self.tool_manager, self.llm, self.logger)
 
-    def startup(self) -> int | None:
-        """
-        Old code that should be removed in future versions.
-        """
-        return
+
     
     def generate(self, text: str, **kwargs):
         """
-        Generate a response from the LLM, optionally including memory context.
-        Args:
-            text: User query or prompt.
-            kwargs: Additional arguments for LLM (e.g., stream=True).
-        Returns:
-            LLM response (stream or dict).
+        Delegate generation to the Agent's implementation.
+        This keeps Core thin and the Agent responsible for orchestration.
         """
-        return self.llm.generate(text, **kwargs)
-        context_items = self.memory.search(text, top_k=3)
-        context_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in context_items
-        )
-        self.memory.add(text, metadata={"source": "user"})
-        self.logger.log("DEBUG", "Memory context retrieved", context_count=len(context_items))
-        tool_lines = [f"{tool['name']}: {tool['description']}" for tool in self.tool_manager.list_tools()]
-        tools_text = "\n".join(tool_lines)
-
-        # Add latest memory records for troubleshooting
-        latest_mem = self.memory.latest(5)
-        latest_mem_text = "\n---\n".join(
-            f"[{item.get('metadata', {}).get('source', 'unknown')}] {item['text']}" for item in latest_mem
-        )
-
-        prompt = ""
-        if context_text:
-            prompt = (
-                "You are continuing a conversation. Use the relevant notes below "
-                "to answer the latest user message.\n"  # brief instruction for clarity
-                f"Relevant notes:\n{context_text}\n\n"
-            )
-
-        if latest_mem_text:
-            prompt += f"[Troubleshooting] Latest memory records:\n{latest_mem_text}\n\n"
-
-        if tools_text:
-            prompt += f"Available tools:\n{tools_text}\n\n"
-
-        prompt += f"Latest user message: {text}"
-
-        self.logger.log("DEBUG", "Final prompt constructed", prompt=prompt)
-
-        stream = kwargs.get("stream", False)
-        return_value = None
-        
-        
-        if stream:
-            # Streaming: accumulate tokens and yield as they arrive, then store full response at end
-            def stream_wrapper():
-                response_text = ""
-                for event in self.llm.generate(prompt, **kwargs):
-                    if isinstance(event, dict):
-                        if event.get("type") == "token":
-                            response_text += event.get("value", "")
-                            yield event
-                        elif event.get("type") == "final":
-                            # Prefer full text from final event if present
-                            response_text = event.get("result", {}).get("text", response_text)
-                            yield event
-                # Store the assistant's full reply in memory after stream ends
-                if response_text:
-                    return_value = response_text
-                    self.memory.add(response_text, metadata={"source": "assistant"})
-            return stream_wrapper()
-        else:
-            # Non-streaming: store output immediately
-            result = self.llm.generate(prompt, **kwargs)
-            output = result.get("output") or result.get("text")
-            if output:
-                self.memory.add(output, metadata={"source": "assistant"})
-            return result
+        return self.agent.generate(text, **kwargs)
+    
+    
         
     def exec_once(self, text: str) -> int:
         """
